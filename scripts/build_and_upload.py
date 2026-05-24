@@ -35,6 +35,7 @@ creds = service_account.Credentials.from_service_account_info(
 )
 drive_service = build("drive", "v3", credentials=creds)
 
+
 def descargar_desde_drive():
     resultados = drive_service.files().list(
         q=f"'{DRIVE_FOLDER_ID}' in parents and trashed=false",
@@ -57,6 +58,7 @@ def descargar_desde_drive():
             _, done = downloader.next_chunk()
     return ruta_local, ext
 
+
 def buscar_imagen_gemini(titulo: str) -> str:
     import urllib.request
     model = genai.GenerativeModel("gemini-1.5-flash")
@@ -69,17 +71,17 @@ def buscar_imagen_gemini(titulo: str) -> str:
     urllib.request.urlretrieve(url, ruta)
     return ruta
 
+
 def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    sinopsis  = data["sinopsis"][:200]
-    generos   = ", ".join(data["generos"][:3])
-    año       = data["año"]
-    pais      = data["pais"]
-    tipo      = data["tipo"]
-    poster_url = data["poster_url"]
+    sinopsis       = data["sinopsis"][:200]
+    generos        = ", ".join(data["generos"][:3])
+    año            = data["año"]
+    pais           = data["pais"]
+    tipo           = data["tipo"]
+    poster_url     = data["poster_url"]
     plataformas_pago   = ", ".join(data["plataformas"]["pago"][:3]) or "No disponible"
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"][:3]) or "No disponible"
 
-    # Descargar poster
     poster_path = "/tmp/poster.jpg"
     if poster_url:
         r = requests.get(poster_url)
@@ -87,8 +89,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
             f.write(r.content)
 
     salida = "/tmp/output_video.mp4"
-
-    # Duración aleatoria entre 30 y 60 segundos solo para imagen
     duracion = random.randint(30, 60) if not es_video else None
 
     filtros = (
@@ -131,18 +131,20 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     subprocess.run(cmd, check=True)
     return salida
 
+
 def agregar_audio(video_path: str, generos: list) -> str:
     genero_principal = generos[0].lower() if generos else "accion"
-   mapeo = {
-    "action": "accion", "thriller": "accion",
-    "horror": "terror", "terror": "terror",
-    "comedy": "comedia", "comedia": "comedia",
-    "romance": "romance", "drama": "drama",
-    "science fiction": "accion", "sci-fi": "accion",
-    "animation": "comedia", "fantasy": "fantasia",
-    "adventure": "aventura", "aventura": "aventura",
-    "crime": "accion", "mystery": "accion"
-}
+    mapeo = {
+        "action": "accion", "thriller": "accion",
+        "horror": "terror", "terror": "terror",
+        "comedy": "comedia", "comedia": "comedia",
+        "romance": "romance", "drama": "drama",
+        "science fiction": "scifi", "sci-fi": "scifi",
+        "animation": "comedia", "fantasy": "fantasia",
+        "adventure": "aventura", "aventura": "aventura",
+        "crime": "crimen", "mystery": "crimen",
+        "history": "historia", "western": "historia"
+    }
     categoria = mapeo.get(genero_principal, "accion")
     audio_dir = Path("audio")
     audios = list(audio_dir.glob(f"{categoria}*.mp3"))
@@ -169,10 +171,11 @@ def agregar_audio(video_path: str, generos: list) -> str:
     subprocess.run(cmd, check=True)
     return salida
 
+
 def generar_metadata(data: dict) -> dict:
-    titulo   = data["titulo"]
-    sinopsis = data["sinopsis"]
-    generos  = ", ".join(data["generos"])
+    titulo             = data["titulo"]
+    sinopsis           = data["sinopsis"]
+    generos            = ", ".join(data["generos"])
     plataformas_pago   = ", ".join(data["plataformas"]["pago"][:3])
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"][:3])
     msg = claude.messages.create(
@@ -199,8 +202,8 @@ Responde SOLO en este formato JSON exacto:
     texto = texto.replace("```json", "").replace("```", "").strip()
     return json.loads(texto)
 
+
 def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
-    """Manda el video final a Telegram."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
     caption = (
         f"✅ *{data['titulo']}* ({data['año']})\n\n"
@@ -215,8 +218,8 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
         }, files={"video": video})
     print("✅ Video enviado a Telegram")
 
+
 # def subir_a_youtube(video_path: str, metadata: dict):
-#     """Sube el video a YouTube."""
 #     youtube = build("youtube", "v3", credentials=creds)
 #     body = {
 #         "snippet": {
@@ -244,6 +247,7 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
 #             print(f"Subiendo... {int(status.progress() * 100)}%")
 #     print(f"✅ Video subido: https://youtube.com/watch?v={response['id']}")
 #     return response["id"]
+
 
 def main():
     with open("movie_data.json", "r", encoding="utf-8") as f:
@@ -276,6 +280,7 @@ def main():
     mandar_a_telegram(video_path, data, metadata)
 
     # subir_a_youtube(video_path, metadata)
+
 
 if __name__ == "__main__":
     main()
