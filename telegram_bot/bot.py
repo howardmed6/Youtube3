@@ -22,14 +22,13 @@ user_state = {}
 # ────────────────────────────────────────────────────────────────
 
 def traducir_sinopsis(texto_en: str) -> str:
-    """Traduce la sinopsis del inglés al español usando Claude."""
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
     msg = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=500,
         messages=[{
             "role": "user",
-            "content": f"Traduce este texto al español de forma natural. Solo devuelve la traducción, sin explicaciones:\n\n{texto_en}"
+            "content": f"Traduce este texto al español. Si ya está en español devuélvelo tal cual sin comentarios ni explicaciones. Solo devuelve el texto final:\n\n{texto_en}"
         }]
     )
     return msg.content[0].text.strip()
