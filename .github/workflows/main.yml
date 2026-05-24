@@ -18,6 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: pip install requests anthropic==0.49.0 google-genai google-api-python-client google-auth
+
       - name: Fetch movie data
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
@@ -34,4 +35,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scripts/build_and_upload.py
