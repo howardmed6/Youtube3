@@ -19,14 +19,19 @@ jobs:
       - name: Install dependencies
         run: pip install requests anthropic==0.49.0 google-genai google-api-python-client google-auth
 
-      - name: Fetch movie data
+      -- name: Fetch movie data
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           MOVIE_ID: ${{ github.event.client_payload.movie_id }}
           MEDIA_TYPE: ${{ github.event.client_payload.media_type }}
           MODO: ${{ github.event.client_payload.modo }}
-        run: python scripts/fetch_data.py
+        run: |
+          echo "MOVIE_ID=${{ github.event.client_payload.movie_id }}"
+          echo "MEDIA_TYPE=${{ github.event.client_payload.media_type }}"
+          echo "MODO=${{ github.event.client_payload.modo }}"
+          python scripts/fetch_data.py
+          ls -la movie_data.json || echo "NO SE CREO EL ARCHIVO"
 
       - name: Build and upload video
         env:
