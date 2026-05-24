@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: youtube-shorts-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r telegram_bot/requirements.txt
+    startCommand: python telegram_bot/bot.py
