@@ -17,8 +17,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests anthropic google-generativeai google-api-python-client
-
+        run: pip install requests anthropic==0.49.0 google-genai google-api-python-client google-auth
       - name: Fetch movie data
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}

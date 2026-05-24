@@ -8,7 +8,7 @@ from pathlib import Path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-import google.generativeai as genai
+from google import genai
 import io
 
 # ─── Variables de entorno ────────────────────────────────────────
@@ -22,8 +22,7 @@ DRIVE_FOLDER_ID         = "1NLhq9q1wxmfTpydDv72Iu4LRt3SoJ-tO"
 
 # ─── Clientes ────────────────────────────────────────────────────
 claude = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-genai.configure(api_key=GEMINI_API_KEY)
-
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 # ─── Credenciales Google ─────────────────────────────────────────
 creds_info = json.loads(GOOGLE_CREDENTIALS_JSON)
 creds = service_account.Credentials.from_service_account_info(
@@ -61,10 +60,9 @@ def descargar_desde_drive():
 
 def buscar_imagen_gemini(titulo: str) -> str:
     import urllib.request
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(
-        f"Give me a direct image URL (jpg or png) related to the movie or TV show '{titulo}'. "
-        f"Return only the URL, nothing else."
+    response = gemini_client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=f"Give me a direct image URL (jpg or png) related to the movie or TV show '{titulo}'. Return only the URL, nothing else."
     )
     url = response.text.strip()
     ruta = "/tmp/gemini_image.jpg"
