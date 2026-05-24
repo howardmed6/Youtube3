@@ -133,14 +133,16 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
 def agregar_audio(video_path: str, generos: list) -> str:
     genero_principal = generos[0].lower() if generos else "accion"
-    mapeo = {
-        "action": "accion", "thriller": "accion",
-        "horror": "terror", "terror": "terror",
-        "comedy": "comedia", "comedia": "comedia",
-        "romance": "romance", "drama": "drama",
-        "science fiction": "scifi", "sci-fi": "scifi",
-        "animation": "animacion", "fantasy": "fantasia"
-    }
+   mapeo = {
+    "action": "accion", "thriller": "accion",
+    "horror": "terror", "terror": "terror",
+    "comedy": "comedia", "comedia": "comedia",
+    "romance": "romance", "drama": "drama",
+    "science fiction": "accion", "sci-fi": "accion",
+    "animation": "comedia", "fantasy": "fantasia",
+    "adventure": "aventura", "aventura": "aventura",
+    "crime": "accion", "mystery": "accion"
+}
     categoria = mapeo.get(genero_principal, "accion")
     audio_dir = Path("audio")
     audios = list(audio_dir.glob(f"{categoria}*.mp3"))
