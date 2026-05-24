@@ -156,9 +156,12 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     paso = estado.get("paso")
 
     # ── Esperando nombre de la peli ──────────────────────────────
-    if paso == "esperando_nombre":
-        await update.message.reply_text(f"🔍 Buscando *{texto}*...", parse_mode="Markdown")
-        resultado = buscar_pelicula(texto)
+    await update.message.reply_text(f"🔍 Buscando *{texto}*...", parse_mode="Markdown")
+try:
+    resultado = buscar_pelicula(texto)
+except Exception as e:
+    await update.message.reply_text(f"❌ Error al buscar: {str(e)}")
+    return
 
         if not resultado:
             await update.message.reply_text(
