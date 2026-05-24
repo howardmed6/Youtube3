@@ -1,0 +1,38 @@
+name: Make YouTube Short
+
+on:
+  repository_dispatch:
+    types: [make_short]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests anthropic google-generativeai google-api-python-client
+
+      - name: Fetch movie data
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          MOVIE_ID: ${{ github.event.client_payload.movie_id }}
+          MEDIA_TYPE: ${{ github.event.client_payload.media_type }}
+          MODO: ${{ github.event.client_payload.modo }}
+        run: python scripts/fetch_data.py
+
+      - name: Build and upload video
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        run: python scripts/build_and_upload.py
