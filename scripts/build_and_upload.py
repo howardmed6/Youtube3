@@ -23,6 +23,7 @@ DRIVE_FOLDER_ID         = "1NLhq9q1wxmfTpydDv72Iu4LRt3SoJ-tO"
 # ─── Clientes ────────────────────────────────────────────────────
 claude = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
 # ─── Credenciales Google ─────────────────────────────────────────
 creds_info = json.loads(GOOGLE_CREDENTIALS_JSON)
 creds = service_account.Credentials.from_service_account_info(
@@ -33,6 +34,61 @@ creds = service_account.Credentials.from_service_account_info(
     ]
 )
 drive_service = build("drive", "v3", credentials=creds)
+
+
+def limpiar_texto(texto: str) -> str:
+    reemplazos = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
+        "'": "", '"': '', ':': '-', '\\': '', '/': '-',
+        '(': '', ')': '', '[': '', ']': '', '&': 'y',
+        '!': '', '?': '', ',': ' ', ';': ' '
+    }
+    for k, v in reemplazos.items():
+        texto = texto.replace(k, v)
+    return texto
+
+
+def justificar_lineas(sinopsis: str, max_chars: int = 44, max_lineas: int = 5) -> list:
+    palabras = sinopsis.split()
+    lineas_raw = []
+    linea_actual = []
+    cuenta = 0
+
+    for palabra in palabras:
+        if cuenta + len(palabra) + len(linea_actual) <= max_chars:
+            linea_actual.append(palabra)
+            cuenta += len(palabra)
+        else:
+            lineas_raw.append(linea_actual)
+            linea_actual = [palabra]
+            cuenta = len(palabra)
+    if linea_actual:
+        lineas_raw.append(linea_actual)
+
+    lineas_raw = lineas_raw[:max_lineas]
+
+    lineas_justificadas = []
+    for i, palabras_linea in enumerate(lineas_raw):
+        if i == len(lineas_raw) - 1 or len(palabras_linea) == 1:
+            lineas_justificadas.append(" ".join(palabras_linea))
+            continue
+        chars_palabras = sum(len(p) for p in palabras_linea)
+        espacios_totales = max_chars - chars_palabras
+        gaps = len(palabras_linea) - 1
+        espacio_base = espacios_totales // gaps
+        extras = espacios_totales % gaps
+        linea = ""
+        for j, palabra in enumerate(palabras_linea):
+            linea += palabra
+            if j < gaps:
+                linea += " " * espacio_base
+                if j < extras:
+                    linea += " "
+        lineas_justificadas.append(linea)
+
+    return lineas_justificadas
 
 
 def descargar_desde_drive():
@@ -70,37 +126,21 @@ def buscar_imagen_gemini(titulo: str) -> str:
     return ruta
 
 
-def limpiar_texto(texto: str) -> str:
-    """Elimina caracteres especiales que FFmpeg no soporta."""
-    reemplazos = {
-        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
-        "'": "", '"': '', ':': '-', '\\': '', '/': '-',
-        '(': '', ')': '', '[': '', ']': '', '&': 'y',
-        '!': '', '?': '', ',': ' ', ';': ' '
-    }
-    for k, v in reemplazos.items():
-        texto = texto.replace(k, v)
-    return texto
-
-
 def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    titulo  = limpiar_texto(data["titulo"])
-    sinopsis = limpiar_texto(data["sinopsis"][:200])
-    generos  = limpiar_texto(", ".join(data["generos"][:3]))
-    año      = data["año"]
-    pais     = limpiar_texto(data["pais"][:20])
-    tipo     = limpiar_texto(data["tipo"])
+    sinopsis   = limpiar_texto(data["sinopsis"][:200])
+    generos    = limpiar_texto(", ".join(data["generos"][:3]))
+    año        = data["año"]
+    pais       = limpiar_texto(data["pais"][:25])
+    tipo       = limpiar_texto(data["tipo"])
     poster_url = data["poster_url"]
 
     # Colores aleatorios
     paletas = [
-        {"marco": "0x00FFFF", "titulo": "cyan",    "fondo": "0x001a1a@0.9"},
-        {"marco": "0xFF6B00", "titulo": "orange",  "fondo": "0x1a0a00@0.9"},
-        {"marco": "0xFF00FF", "titulo": "fuchsia", "fondo": "0x1a001a@0.9"},
-        {"marco": "0x00FF88", "titulo": "0x00FF88","fondo": "0x001a0a@0.9"},
-        {"marco": "0xFFD700", "titulo": "gold",    "fondo": "0x1a1400@0.9"},
+        {"marco": "0x00FFFF", "titulo": "cyan",     "fondo": "0x001a1a@0.9"},
+        {"marco": "0xFF6B00", "titulo": "orange",   "fondo": "0x1a0a00@0.9"},
+        {"marco": "0xFF00FF", "titulo": "fuchsia",  "fondo": "0x1a001a@0.9"},
+        {"marco": "0x00FF88", "titulo": "0x00FF88", "fondo": "0x001a0a@0.9"},
+        {"marco": "0xFFD700", "titulo": "gold",     "fondo": "0x1a1400@0.9"},
     ]
     paleta       = random.choice(paletas)
     color_marco  = paleta["marco"]
@@ -114,19 +154,8 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         with open(poster_path, "wb") as f:
             f.write(r.content)
 
-    # Dividir sinopsis en líneas de max 48 chars
-    palabras = sinopsis.split()
-    lineas = []
-    linea_actual = ""
-    for palabra in palabras:
-        if len(linea_actual) + len(palabra) + 1 <= 48:
-            linea_actual += (" " if linea_actual else "") + palabra
-        else:
-            lineas.append(linea_actual)
-            linea_actual = palabra
-    if linea_actual:
-        lineas.append(linea_actual)
-    lineas = lineas[:5]
+    # Sinopsis justificada
+    lineas = justificar_lineas(sinopsis, max_chars=44, max_lineas=5)
 
     salida = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
@@ -156,21 +185,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         f":x=30:y=20:shadowcolor=black:shadowx=2:shadowy=2[vs0];"
         f"{sinopsis_filters}"
 
-        # ── Sección 2 — Trailer/Imagen (y=250 h=1370) ───────────
-        f"[{v_actual}]drawbox=x=0:y=250:w=1080:h=1370:color={color_marco}@0.9:t=4[sec2];"
-
-        # ── Sección 3 — Poster + Datos (y=1620 h=300) ───────────
-        f"[sec2]drawbox=x=0:y=1620:w=1080:h=300:color={color_fondo}:t=fill[sec3];"
-        f"[sec3]drawbox=x=0:y=1620:w=1080:h=300:color={color_marco}@0.9:t=4[sec3b];"
-
-        # ── Poster ───────────────────────────────────────────────
-        f"[1:v]scale=200:280[poster];"
-        f"[sec3b][poster]overlay=10:1625[con_poster];"
-
-        # ── Datos ────────────────────────────────────────────────
-        f"[con_poster]drawtext=text='Generos':fontsize=26:fontcolor={color_titulo}"
-        f":x=225:y=1635:shadowcolor=black:shadowx=1:shadowy=1[d1];"
-        f"[d1]drawtext=text='{generos# ── Sección 2 — Trailer/Imagen (y=250 h=1220) ───────────
+        # ── Sección 2 — Trailer/Imagen (y=250 h=1220) ───────────
         f"[{v_actual}]drawbox=x=0:y=250:w=1080:h=1220:color={color_marco}@0.9:t=4[sec2];"
 
         # ── Sección 3 — Poster + Datos (y=1470 h=450) ───────────
@@ -187,9 +202,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         f"[d1]drawtext=text='{generos}':fontsize=29:fontcolor=white:x=265:y=1528[d2];"
         f"[d2]drawtext=text='{pais}':fontsize=29:fontcolor=white:x=265:y=1600[d3];"
         f"[d3]drawtext=text='{tipo}  {año}':fontsize=29:fontcolor=white:x=265:y=1660[d4];"
-        f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"}':fontsize=23:fontcolor=white:x=225:y=1668[d2];"
-        f"[d2]drawtext=text='{pais}':fontsize=23:fontcolor=white:x=225:y=1720[d3];"
-        f"[d3]drawtext=text='{tipo}  {año}':fontsize=23:fontcolor=white:x=225:y=1760[d4];"
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
     )
 
@@ -241,7 +253,7 @@ def agregar_audio(video_path: str, generos: list) -> str:
     if not audios:
         audios = list(audio_dir.glob("*.mp3"))
     if not audios:
-        print("No se encontró audio, continuando sin música")
+        print("No se encontro audio continuando sin musica")
         return video_path
     audio_elegido = random.choice(audios)
     print(f"Audio elegido: {audio_elegido}")
@@ -273,17 +285,17 @@ def generar_metadata(data: dict) -> dict:
         max_tokens=500,
         messages=[{
             "role": "user",
-            "content": f"""Genera metadata para un YouTube Short recomendando esta película/serie.
-Título: {titulo}
+            "content": f"""Genera metadata para un YouTube Short recomendando esta pelicula o serie.
+Titulo: {titulo}
 Sinopsis: {sinopsis}
-Géneros: {generos}
+Generos: {generos}
 Disponible en: {plataformas_pago}
 Gratis en: {plataformas_gratis}
 
 Responde SOLO en este formato JSON exacto:
 {{
-  "titulo_yt": "título llamativo para YouTube Shorts máximo 60 caracteres incluyendo emoji",
-  "descripcion": "descripción corta máximo 200 caracteres recomendando la peli mencionando plataformas",
+  "titulo_yt": "titulo llamativo para YouTube Shorts maximo 60 caracteres incluyendo emoji",
+  "descripcion": "descripcion corta maximo 200 caracteres recomendando la peli mencionando plataformas",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "Shorts", "peliculas", "series"]
 }}"""
         }]
@@ -294,15 +306,13 @@ Responde SOLO en este formato JSON exacto:
 
 
 def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
-    """Manda el video y la info de plataformas a Telegram."""
     plataformas_pago   = ", ".join(data["plataformas"]["pago"]) or "No disponible"
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"]) or "No disponible"
 
-    # Primero manda mensaje con plataformas
     url_msg = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     mensaje = (
         f"🎬 *{data['titulo']}* ({data['año']})\n\n"
-        f"📺 *Dónde ver:*\n"
+        f"📺 *Donde ver:*\n"
         f"💰 Pago: {plataformas_pago}\n"
         f"🆓 Gratis: {plataformas_gratis}\n\n"
         f"📝 *YouTube:* {metadata['titulo_yt']}"
@@ -313,7 +323,6 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
         "parse_mode": "Markdown"
     })
 
-    # Luego manda el video
     url_vid = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
     with open(video_path, "rb") as video:
         requests.post(url_vid, data={
@@ -322,7 +331,7 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
             "parse_mode": "Markdown"
         }, files={"video": video})
 
-    print("✅ Video y plataformas enviados a Telegram")
+    print("Video y plataformas enviados a Telegram")
 
 
 # def subir_a_youtube(video_path: str, metadata: dict):
@@ -351,7 +360,7 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
 #         status, response = request.next_chunk()
 #         if status:
 #             print(f"Subiendo... {int(status.progress() * 100)}%")
-#     print(f"✅ Video subido: https://youtube.com/watch?v={response['id']}")
+#     print(f"Video subido: https://youtube.com/watch?v={response['id']}")
 #     return response["id"]
 
 
@@ -359,7 +368,7 @@ def main():
     with open("movie_data.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    modo = int(data["modo"])
+    modo    = int(data["modo"])
     generos = data["generos"]
     es_video = False
 
@@ -381,7 +390,7 @@ def main():
         video_path = agregar_audio(video_path, generos)
 
     metadata = generar_metadata(data)
-    print(f"Título YT: {metadata['titulo_yt']}")
+    print(f"Titulo YT: {metadata['titulo_yt']}")
 
     mandar_a_telegram(video_path, data, metadata)
 
