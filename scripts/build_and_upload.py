@@ -71,34 +71,89 @@ def buscar_imagen_gemini(titulo: str) -> str:
 
 
 def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    sinopsis       = data["sinopsis"][:150].replace("'", "").replace(":", "").replace("\\", "")
+    titulo         = data["titulo"]
+    sinopsis       = data["sinopsis"][:200].replace("'", "").replace(":", "-").replace("\\", "")
     generos        = ", ".join(data["generos"][:3]).replace("'", "")
     año            = data["año"]
-    pais           = data["pais"].replace("'", "")[:20]
+    pais           = data["pais"].replace("'", "")[:25]
     tipo           = data["tipo"]
     poster_url     = data["poster_url"]
-    plataformas_pago   = ", ".join(data["plataformas"]["pago"][:2]).replace("'", "") or "No disponible"
-    plataformas_gratis = ", ".join(data["plataformas"]["gratis"][:2]).replace("'", "") or "No disponible"
 
+    # Colores aleatorios para marcos y textos
+    paletas = [
+        {"marco": "0x00FFFF", "titulo": "cyan", "datos": "white", "fondo": "0x001a1a@0.85"},
+        {"marco": "0xFF6B00", "titulo": "orange", "datos": "white", "fondo": "0x1a0a00@0.85"},
+        {"marco": "0xFF00FF", "titulo": "fuchsia", "datos": "white", "fondo": "0x1a001a@0.85"},
+        {"marco": "0x00FF88", "titulo": "0x00FF88", "datos": "white", "fondo": "0x001a0a@0.85"},
+        {"marco": "0xFFD700", "titulo": "gold", "datos": "white", "fondo": "0x1a1400@0.85"},
+    ]
+    paleta = random.choice(paletas)
+    color_marco  = paleta["marco"]
+    color_titulo = paleta["titulo"]
+    color_datos  = paleta["datos"]
+    color_fondo  = paleta["fondo"]
+
+    # Descargar poster
     poster_path = "/tmp/poster.jpg"
     if poster_url:
         r = requests.get(poster_url)
         with open(poster_path, "wb") as f:
             f.write(r.content)
 
+    # Dividir sinopsis en líneas de max 45 chars
+    palabras = sinopsis.split()
+    lineas = []
+    linea_actual = ""
+    for palabra in palabras:
+        if len(linea_actual) + len(palabra) + 1 <= 45:
+            linea_actual += (" " if linea_actual else "") + palabra
+        else:
+            lineas.append(linea_actual)
+            linea_actual = palabra
+    if linea_actual:
+        lineas.append(linea_actual)
+    lineas = lineas[:5]  # max 5 líneas
+
     salida = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
 
+    # Construir drawtext para cada línea de sinopsis
+    sinopsis_filters = ""
+    for i, linea in enumerate(lineas):
+        y_pos = 85 + (i * 38)
+        sinopsis_filters += (
+            f"[v{i+1}]drawtext=text='{linea}':fontsize=28:fontcolor=white"
+            f":x=30:y={y_pos}:shadowcolor=black:shadowx=2:shadowy=2[v{i+2}];"
+        )
+    ultimo_v = f"v{len(lineas)+1}"
+
     filtros = (
+        # Fondo negro
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
-        f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2[bg];"
-        f"[1:v]scale=180:270[poster];"
-        f"[bg][poster]overlay=20:1600[v];"
-        f"[v]drawtext=text='{sinopsis}':fontsize=26:fontcolor=white:x=20:y=20[v2];"
-        f"[v2]drawtext=text='Generos {generos}':fontsize=24:fontcolor=white:x=220:y=1610[v3];"
-        f"[v3]drawtext=text='Pais {pais} Tipo {tipo} Ano {año}':fontsize=22:fontcolor=white:x=220:y=1650[v4];"
-        f"[v4]drawtext=text='Ver en {plataformas_pago}':fontsize=20:fontcolor=yellow:x=220:y=1700[v5];"
-        f"[v5]drawtext=text='Gratis en {plataformas_gratis}':fontsize=20:fontcolor=lightgreen:x=220:y=1730[out]"
+        f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
+        # Oscurecer fondo
+        f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.5:t=fill[dark];"
+        # Marco sección sinopsis
+        f"[dark]drawbox=x=20:y=20:w=1040:h=240:color={color_marco}@0.8:t=3[s0];"
+        f"[s0]drawbox=x=20:y=20:w=1040:h=240:color={color_fondo}:t=fill[s1];"
+        f"[s1]drawtext=text='Sinopsis':fontsize=32:fontcolor={color_titulo}"
+        f":x=35:y=30:shadowcolor=black:shadowx=2:shadowy=2[v1];"
+        # Líneas de sinopsis
+        f"{sinopsis_filters}"
+        # Marco sección trailer/imagen
+        f"[{ultimo_v}]drawbox=x=20:y=275:w=1040:h=620:color={color_marco}@0.8:t=3[m1];"
+        # Poster
+        f"[1:v]scale=220:330[poster];"
+        f"[m1][poster]overlay=30:910[m2];"
+        # Marco datos
+        f"[m2]drawbox=x=270:y=910:w=780:h=330:color={color_marco}@0.8:t=3[m3];"
+        f"[m3]drawbox=x=270:y=910:w=780:h=330:color={color_fondo}:t=fill[m4];"
+        # Datos
+        f"[m4]drawtext=text='Generos':fontsize=24:fontcolor={color_titulo}:x=285:y=925[d1];"
+        f"[d1]drawtext=text='{generos}':fontsize=22:fontcolor={color_datos}:x=285:y=958[d2];"
+        f"[d2]drawtext=text='Pais- {pais}':fontsize=22:fontcolor={color_datos}:x=285:y=1000[d3];"
+        f"[d3]drawtext=text='Tipo- {tipo}  Ano- {año}':fontsize=22:fontcolor={color_datos}:x=285:y=1040[d4];"
+        f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
     )
 
     if es_video:
@@ -128,6 +183,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     subprocess.run(cmd, check=True)
     return salida
+
 
 
 def agregar_audio(video_path: str, generos: list) -> str:
@@ -202,19 +258,35 @@ Responde SOLO en este formato JSON exacto:
 
 
 def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
-    caption = (
-        f"✅ *{data['titulo']}* ({data['año']})\n\n"
-        f"📝 {metadata['titulo_yt']}\n\n"
-        f"🎬 Listo para subir a YouTube"
+    """Manda el video y la info de plataformas a Telegram."""
+    plataformas_pago   = ", ".join(data["plataformas"]["pago"]) or "No disponible"
+    plataformas_gratis = ", ".join(data["plataformas"]["gratis"]) or "No disponible"
+
+    # Primero manda mensaje con plataformas
+    url_msg = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    mensaje = (
+        f"🎬 *{data['titulo']}* ({data['año']})\n\n"
+        f"📺 *Dónde ver:*\n"
+        f"💰 Pago: {plataformas_pago}\n"
+        f"🆓 Gratis: {plataformas_gratis}\n\n"
+        f"📝 *YouTube:* {metadata['titulo_yt']}"
     )
+    requests.post(url_msg, json={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": mensaje,
+        "parse_mode": "Markdown"
+    })
+
+    # Luego manda el video
+    url_vid = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
     with open(video_path, "rb") as video:
-        requests.post(url, data={
+        requests.post(url_vid, data={
             "chat_id": TELEGRAM_CHAT_ID,
-            "caption": caption,
+            "caption": f"✅ *{data['titulo']}* — Listo para YouTube",
             "parse_mode": "Markdown"
         }, files={"video": video})
-    print("✅ Video enviado a Telegram")
+
+    print("✅ Video y plataformas enviados a Telegram")
 
 
 # def subir_a_youtube(video_path: str, metadata: dict):
