@@ -70,27 +70,41 @@ def buscar_imagen_gemini(titulo: str) -> str:
     return ruta
 
 
-def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    titulo         = data["titulo"]
-    sinopsis       = data["sinopsis"][:200].replace("'", "").replace(":", "-").replace("\\", "")
-    generos        = ", ".join(data["generos"][:3]).replace("'", "")
-    año            = data["año"]
-    pais           = data["pais"].replace("'", "")[:25]
-    tipo           = data["tipo"]
-    poster_url     = data["poster_url"]
+def limpiar_texto(texto: str) -> str:
+    """Elimina caracteres especiales que FFmpeg no soporta."""
+    reemplazos = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
+        "'": "", '"': '', ':': '-', '\\': '', '/': '-',
+        '(': '', ')': '', '[': '', ']': '', '&': 'y',
+        '!': '', '?': '', ',': ' ', ';': ' '
+    }
+    for k, v in reemplazos.items():
+        texto = texto.replace(k, v)
+    return texto
 
-    # Colores aleatorios para marcos y textos
+
+def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
+    titulo  = limpiar_texto(data["titulo"])
+    sinopsis = limpiar_texto(data["sinopsis"][:200])
+    generos  = limpiar_texto(", ".join(data["generos"][:3]))
+    año      = data["año"]
+    pais     = limpiar_texto(data["pais"][:20])
+    tipo     = limpiar_texto(data["tipo"])
+    poster_url = data["poster_url"]
+
+    # Colores aleatorios
     paletas = [
-        {"marco": "0x00FFFF", "titulo": "cyan", "datos": "white", "fondo": "0x001a1a@0.85"},
-        {"marco": "0xFF6B00", "titulo": "orange", "datos": "white", "fondo": "0x1a0a00@0.85"},
-        {"marco": "0xFF00FF", "titulo": "fuchsia", "datos": "white", "fondo": "0x1a001a@0.85"},
-        {"marco": "0x00FF88", "titulo": "0x00FF88", "datos": "white", "fondo": "0x001a0a@0.85"},
-        {"marco": "0xFFD700", "titulo": "gold", "datos": "white", "fondo": "0x1a1400@0.85"},
+        {"marco": "0x00FFFF", "titulo": "cyan",    "fondo": "0x001a1a@0.9"},
+        {"marco": "0xFF6B00", "titulo": "orange",  "fondo": "0x1a0a00@0.9"},
+        {"marco": "0xFF00FF", "titulo": "fuchsia", "fondo": "0x1a001a@0.9"},
+        {"marco": "0x00FF88", "titulo": "0x00FF88","fondo": "0x001a0a@0.9"},
+        {"marco": "0xFFD700", "titulo": "gold",    "fondo": "0x1a1400@0.9"},
     ]
-    paleta = random.choice(paletas)
+    paleta       = random.choice(paletas)
     color_marco  = paleta["marco"]
     color_titulo = paleta["titulo"]
-    color_datos  = paleta["datos"]
     color_fondo  = paleta["fondo"]
 
     # Descargar poster
@@ -100,59 +114,65 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         with open(poster_path, "wb") as f:
             f.write(r.content)
 
-    # Dividir sinopsis en líneas de max 45 chars
+    # Dividir sinopsis en líneas de max 48 chars
     palabras = sinopsis.split()
     lineas = []
     linea_actual = ""
     for palabra in palabras:
-        if len(linea_actual) + len(palabra) + 1 <= 45:
+        if len(linea_actual) + len(palabra) + 1 <= 48:
             linea_actual += (" " if linea_actual else "") + palabra
         else:
             lineas.append(linea_actual)
             linea_actual = palabra
     if linea_actual:
         lineas.append(linea_actual)
-    lineas = lineas[:5]  # max 5 líneas
+    lineas = lineas[:5]
 
     salida = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
 
-    # Construir drawtext para cada línea de sinopsis
+    # Drawtext sinopsis línea por línea
     sinopsis_filters = ""
+    v_actual = "vs0"
     for i, linea in enumerate(lineas):
-        y_pos = 85 + (i * 38)
+        v_siguiente = f"vs{i+1}"
+        y_pos = 85 + (i * 36)
         sinopsis_filters += (
-            f"[v{i+1}]drawtext=text='{linea}':fontsize=28:fontcolor=white"
-            f":x=30:y={y_pos}:shadowcolor=black:shadowx=2:shadowy=2[v{i+2}];"
+            f"[{v_actual}]drawtext=text='{linea}':fontsize=27:fontcolor=white"
+            f":x=30:y={y_pos}:shadowcolor=black:shadowx=2:shadowy=2[{v_siguiente}];"
         )
-    ultimo_v = f"v{len(lineas)+1}"
+        v_actual = v_siguiente
 
     filtros = (
-        # Fondo negro
+        # ── Base ────────────────────────────────────────────────
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
         f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
-        # Oscurecer fondo
-        f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.5:t=fill[dark];"
-        # Marco sección sinopsis
-        f"[dark]drawbox=x=20:y=20:w=1040:h=240:color={color_marco}@0.8:t=3[s0];"
-        f"[s0]drawbox=x=20:y=20:w=1040:h=240:color={color_fondo}:t=fill[s1];"
-        f"[s1]drawtext=text='Sinopsis':fontsize=32:fontcolor={color_titulo}"
-        f":x=35:y=30:shadowcolor=black:shadowx=2:shadowy=2[v1];"
-        # Líneas de sinopsis
+        f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.4:t=fill[dark];"
+
+        # ── Sección 1 — Sinopsis (y=0 h=250) ────────────────────
+        f"[dark]drawbox=x=0:y=0:w=1080:h=250:color={color_fondo}:t=fill[sec1];"
+        f"[sec1]drawbox=x=0:y=0:w=1080:h=250:color={color_marco}@0.9:t=4[sec1b];"
+        f"[sec1b]drawtext=text='Sinopsis':fontsize=34:fontcolor={color_titulo}"
+        f":x=30:y=20:shadowcolor=black:shadowx=2:shadowy=2[vs0];"
         f"{sinopsis_filters}"
-        # Marco sección trailer/imagen
-        f"[{ultimo_v}]drawbox=x=20:y=275:w=1040:h=620:color={color_marco}@0.8:t=3[m1];"
-        # Poster
-        f"[1:v]scale=220:330[poster];"
-        f"[m1][poster]overlay=30:910[m2];"
-        # Marco datos
-        f"[m2]drawbox=x=270:y=910:w=780:h=330:color={color_marco}@0.8:t=3[m3];"
-        f"[m3]drawbox=x=270:y=910:w=780:h=330:color={color_fondo}:t=fill[m4];"
-        # Datos
-        f"[m4]drawtext=text='Generos':fontsize=24:fontcolor={color_titulo}:x=285:y=925[d1];"
-        f"[d1]drawtext=text='{generos}':fontsize=22:fontcolor={color_datos}:x=285:y=958[d2];"
-        f"[d2]drawtext=text='Pais- {pais}':fontsize=22:fontcolor={color_datos}:x=285:y=1000[d3];"
-        f"[d3]drawtext=text='Tipo- {tipo}  Ano- {año}':fontsize=22:fontcolor={color_datos}:x=285:y=1040[d4];"
+
+        # ── Sección 2 — Trailer/Imagen (y=250 h=1370) ───────────
+        f"[{v_actual}]drawbox=x=0:y=250:w=1080:h=1370:color={color_marco}@0.9:t=4[sec2];"
+
+        # ── Sección 3 — Poster + Datos (y=1620 h=300) ───────────
+        f"[sec2]drawbox=x=0:y=1620:w=1080:h=300:color={color_fondo}:t=fill[sec3];"
+        f"[sec3]drawbox=x=0:y=1620:w=1080:h=300:color={color_marco}@0.9:t=4[sec3b];"
+
+        # ── Poster ───────────────────────────────────────────────
+        f"[1:v]scale=200:280[poster];"
+        f"[sec3b][poster]overlay=10:1625[con_poster];"
+
+        # ── Datos ────────────────────────────────────────────────
+        f"[con_poster]drawtext=text='Generos':fontsize=26:fontcolor={color_titulo}"
+        f":x=225:y=1635:shadowcolor=black:shadowx=1:shadowy=1[d1];"
+        f"[d1]drawtext=text='{generos}':fontsize=23:fontcolor=white:x=225:y=1668[d2];"
+        f"[d2]drawtext=text='{pais}':fontsize=23:fontcolor=white:x=225:y=1720[d3];"
+        f"[d3]drawtext=text='{tipo}  {año}':fontsize=23:fontcolor=white:x=225:y=1760[d4];"
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
     )
 
@@ -183,7 +203,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     subprocess.run(cmd, check=True)
     return salida
-
 
 
 def agregar_audio(video_path: str, generos: list) -> str:
