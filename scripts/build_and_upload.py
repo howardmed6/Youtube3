@@ -71,14 +71,14 @@ def buscar_imagen_gemini(titulo: str) -> str:
 
 
 def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    sinopsis       = data["sinopsis"][:200]
-    generos        = ", ".join(data["generos"][:3])
+    sinopsis       = data["sinopsis"][:150].replace("'", "").replace(":", "").replace("\\", "")
+    generos        = ", ".join(data["generos"][:3]).replace("'", "")
     año            = data["año"]
-    pais           = data["pais"]
+    pais           = data["pais"].replace("'", "")[:20]
     tipo           = data["tipo"]
     poster_url     = data["poster_url"]
-    plataformas_pago   = ", ".join(data["plataformas"]["pago"][:3]) or "No disponible"
-    plataformas_gratis = ", ".join(data["plataformas"]["gratis"][:3]) or "No disponible"
+    plataformas_pago   = ", ".join(data["plataformas"]["pago"][:2]).replace("'", "") or "No disponible"
+    plataformas_gratis = ", ".join(data["plataformas"]["gratis"][:2]).replace("'", "") or "No disponible"
 
     poster_path = "/tmp/poster.jpg"
     if poster_url:
@@ -94,11 +94,11 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2[bg];"
         f"[1:v]scale=180:270[poster];"
         f"[bg][poster]overlay=20:1600[v];"
-        f"[v]drawtext=text='{sinopsis}':fontsize=28:fontcolor=white:x=20:y=20:w=1040:line_spacing=8[v2];"
-        f"[v2]drawtext=text='Géneros\\: {generos}':fontsize=24:fontcolor=white:x=220:y=1610[v3];"
-        f"[v3]drawtext=text='País\\: {pais} | Tipo\\: {tipo} | Año\\: {año}':fontsize=22:fontcolor=white:x=220:y=1650[v4];"
-        f"[v4]drawtext=text='Ver en\\: {plataformas_pago}':fontsize=20:fontcolor=yellow:x=220:y=1700[v5];"
-        f"[v5]drawtext=text='Gratis en\\: {plataformas_gratis}':fontsize=20:fontcolor=lightgreen:x=220:y=1730[out]"
+        f"[v]drawtext=text='{sinopsis}':fontsize=26:fontcolor=white:x=20:y=20[v2];"
+        f"[v2]drawtext=text='Generos {generos}':fontsize=24:fontcolor=white:x=220:y=1610[v3];"
+        f"[v3]drawtext=text='Pais {pais} Tipo {tipo} Ano {año}':fontsize=22:fontcolor=white:x=220:y=1650[v4];"
+        f"[v4]drawtext=text='Ver en {plataformas_pago}':fontsize=20:fontcolor=yellow:x=220:y=1700[v5];"
+        f"[v5]drawtext=text='Gratis en {plataformas_gratis}':fontsize=20:fontcolor=lightgreen:x=220:y=1730[out]"
     )
 
     if es_video:
