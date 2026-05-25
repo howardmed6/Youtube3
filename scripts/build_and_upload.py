@@ -170,7 +170,24 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         # ── Datos ────────────────────────────────────────────────
         f"[con_poster]drawtext=text='Generos':fontsize=26:fontcolor={color_titulo}"
         f":x=225:y=1635:shadowcolor=black:shadowx=1:shadowy=1[d1];"
-        f"[d1]drawtext=text='{generos}':fontsize=23:fontcolor=white:x=225:y=1668[d2];"
+        f"[d1]drawtext=text='{generos# ── Sección 2 — Trailer/Imagen (y=250 h=1220) ───────────
+        f"[{v_actual}]drawbox=x=0:y=250:w=1080:h=1220:color={color_marco}@0.9:t=4[sec2];"
+
+        # ── Sección 3 — Poster + Datos (y=1470 h=450) ───────────
+        f"[sec2]drawbox=x=0:y=1470:w=1080:h=450:color={color_fondo}:t=fill[sec3];"
+        f"[sec3]drawbox=x=0:y=1470:w=1080:h=450:color={color_marco}@0.9:t=4[sec3b];"
+
+        # ── Poster ───────────────────────────────────────────────
+        f"[1:v]scale=240:340[poster];"
+        f"[sec3b][poster]overlay=10:1475[con_poster];"
+
+        # ── Datos ────────────────────────────────────────────────
+        f"[con_poster]drawtext=text='Generos':fontsize=32:fontcolor={color_titulo}"
+        f":x=265:y=1485:shadowcolor=black:shadowx=1:shadowy=1[d1];"
+        f"[d1]drawtext=text='{generos}':fontsize=29:fontcolor=white:x=265:y=1528[d2];"
+        f"[d2]drawtext=text='{pais}':fontsize=29:fontcolor=white:x=265:y=1600[d3];"
+        f"[d3]drawtext=text='{tipo}  {año}':fontsize=29:fontcolor=white:x=265:y=1660[d4];"
+        f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"}':fontsize=23:fontcolor=white:x=225:y=1668[d2];"
         f"[d2]drawtext=text='{pais}':fontsize=23:fontcolor=white:x=225:y=1720[d3];"
         f"[d3]drawtext=text='{tipo}  {año}':fontsize=23:fontcolor=white:x=225:y=1760[d4];"
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
