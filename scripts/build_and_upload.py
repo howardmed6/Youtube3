@@ -262,8 +262,11 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
             "-shortest",
             salida
         ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        print("STDERR:", result.stderr[-3000:])
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg failed: {result.stderr[-1000:]}")
     else:
-        # Solo el frame como video estático
         cmd = [
             "ffmpeg", "-y",
             "-loop", "1", "-t", str(duracion), "-i", frame_path,
@@ -272,8 +275,8 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
             "-pix_fmt", "yuv420p",
             salida
         ]
+        subprocess.run(cmd, check=True)
 
-    subprocess.run(cmd, check=True)
     return salida
 
 
