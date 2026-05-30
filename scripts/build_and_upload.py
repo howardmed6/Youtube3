@@ -246,17 +246,17 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     y_sec2       = 250
 
     if es_video:
-        # Overlay del trailer sobre el frame
         cmd = [
             "ffmpeg", "-y",
-            "-loop", "1", "-i", frame_path,
             "-i", ruta_media,
+            "-i", frame_path,
             "-filter_complex",
-            f"[1:v]scale=1080:{altura_media}:force_original_aspect_ratio=decrease,"
+            f"[0:v]scale=1080:{altura_media}:force_original_aspect_ratio=decrease,"
             f"pad=1080:{altura_media}:(ow-iw)/2:(oh-ih)/2[vid];"
-            f"[0:v][vid]overlay=0:{y_sec2}[out]",
+            f"[1:v]scale=1080:1920[frame];"
+            f"[frame][vid]overlay=0:{y_sec2}[out]",
             "-map", "[out]",
-            "-map", "1:a?",
+            "-map", "0:a?",
             "-c:v", "libx264",
             "-c:a", "aac",
             "-shortest",
