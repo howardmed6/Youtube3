@@ -5,13 +5,11 @@ import requests
 import anthropic
 import subprocess
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google import genai
 import io
-import textwrap
 
 # ─── Variables de entorno ────────────────────────────────────────
 CLAUDE_API_KEY          = os.environ["CLAUDE_API_KEY"]
@@ -43,11 +41,50 @@ def limpiar_texto(texto: str) -> str:
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
         'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
         'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U',
-        '"': '', '\\': '', '[': '', ']': '', '&': 'y',
+        "'": "", '"': '', ':': '-', '\\': '', '/': '-',
+        '(': '', ')': '', '[': '', ']': '', '&': 'y',
+        '!': '', '?': '', ',': ' ', ';': ' '
     }
     for k, v in reemplazos.items():
         texto = texto.replace(k, v)
     return texto
+
+
+def justificar_lineas(sinopsis: str, max_chars: int = 44, max_lineas: int = 5) -> list:
+    palabras = sinopsis.split()
+    lineas_raw = []
+    linea_actual = []
+    cuenta = 0
+    for palabra in palabras:
+        if cuenta + len(palabra) + len(linea_actual) <= max_chars:
+            linea_actual.append(palabra)
+            cuenta += len(palabra)
+        else:
+            lineas_raw.append(linea_actual)
+            linea_actual = [palabra]
+            cuenta = len(palabra)
+    if linea_actual:
+        lineas_raw.append(linea_actual)
+    lineas_raw = lineas_raw[:max_lineas]
+    lineas_justificadas = []
+    for i, palabras_linea in enumerate(lineas_raw):
+        if i == len(lineas_raw) - 1 or len(palabras_linea) == 1:
+            lineas_justificadas.append(" ".join(palabras_linea))
+            continue
+        chars_palabras = sum(len(p) for p in palabras_linea)
+        espacios_totales = max_chars - chars_palabras
+        gaps = len(palabras_linea) - 1
+        espacio_base = espacios_totales // gaps
+        extras = espacios_totales % gaps
+        linea = ""
+        for j, palabra in enumerate(palabras_linea):
+            linea += palabra
+            if j < gaps:
+                linea += " " * espacio_base
+                if j < extras:
+                    linea += " "
+        lineas_justificadas.append(linea)
+    return lineas_justificadas
 
 
 def obtener_resolucion(ruta: str) -> tuple:
@@ -73,12 +110,12 @@ def descargar_desde_drive():
     archivos = resultados.get("files", [])
     if not archivos:
         raise Exception("No hay archivos en la carpeta de Drive")
-    archivo   = archivos[0]
-    file_id   = archivo["id"]
-    nombre    = archivo["name"]
-    ext       = Path(nombre).suffix.lower()
+    archivo    = archivos[0]
+    file_id    = archivo["id"]
+    nombre     = archivo["name"]
+    ext        = Path(nombre).suffix.lower()
     print(f"Descargando {nombre} de Drive...")
-    request   = drive_service.files().get_media(fileId=file_id)
+    request    = drive_service.files().get_media(fileId=file_id)
     ruta_local = f"/tmp/media{ext}"
     with open(ruta_local, "wb") as f:
         downloader = MediaIoBaseDownload(f, request)
@@ -100,161 +137,109 @@ def buscar_imagen_gemini(titulo: str) -> str:
     return ruta
 
 
-def construir_frame(data: dict, ruta_media: str, es_video: bool) -> str:
-    """Construye el frame PNG usando Pillow y devuelve la ruta."""
-
-    sinopsis   = limpiar_texto(data["sinopsis"][:300])
+def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
+    sinopsis   = limpiar_texto(data["sinopsis"][:200])
     generos    = limpiar_texto(", ".join(data["generos"][:3]))
     año        = data["año"]
-    pais       = limpiar_texto(data["pais"][:30])
+    pais       = limpiar_texto(data["pais"][:25])
     tipo       = limpiar_texto(data["tipo"])
     poster_url = data["poster_url"]
 
+    # ── Detectar resolución y calcular alturas ───────────────────
+    ancho_orig, alto_orig = obtener_resolucion(ruta_media)
+    ratio        = alto_orig / ancho_orig
+    altura_media = int(1080 * ratio)
+    altura_media = max(500, min(1300, altura_media))
+
+    y_sec1  = 0
+    h_sec1  = 250
+    y_sec2  = h_sec1
+    h_sec2  = altura_media
+    y_sec3  = y_sec2 + h_sec2
+    h_sec3  = 1920 - y_sec3
+
+    print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px total={h_sec1+h_sec2+h_sec3}px")
+
+    # Poster proporcional al espacio disponible
+    alto_poster  = min(h_sec3 - 30, 400)
+    ancho_poster = int(alto_poster * 0.67)
+    y_poster     = y_sec3 + (h_sec3 - alto_poster) // 2
+    x_datos      = ancho_poster + 25
+
+    # Fuentes proporcionales
+    font_tit  = min(38, max(28, h_sec3 // 5))
+    font_dat  = min(32, max(24, h_sec3 // 6))
+    y_g_label = y_sec3 + 20
+    y_g_val   = y_g_label + font_tit + 8
+    y_pais    = y_g_val + font_dat + 15
+    y_tipo    = y_pais + font_dat + 15
+
     # ── Colores aleatorios ───────────────────────────────────────
     paletas = [
-        {"marco": (0, 255, 255),   "titulo": (0, 255, 255),   "fondo": (0, 26, 26)},
-        {"marco": (255, 107, 0),   "titulo": (255, 107, 0),   "fondo": (26, 10, 0)},
-        {"marco": (255, 0, 255),   "titulo": (255, 0, 255),   "fondo": (26, 0, 26)},
-        {"marco": (0, 255, 136),   "titulo": (0, 255, 136),   "fondo": (0, 26, 10)},
-        {"marco": (255, 215, 0),   "titulo": (255, 215, 0),   "fondo": (26, 20, 0)},
+        {"marco": "0x00FFFF", "titulo": "cyan",     "fondo": "0x001a1a@0.9"},
+        {"marco": "0xFF6B00", "titulo": "orange",   "fondo": "0x1a0a00@0.9"},
+        {"marco": "0xFF00FF", "titulo": "fuchsia",  "fondo": "0x1a001a@0.9"},
+        {"marco": "0x00FF88", "titulo": "0x00FF88", "fondo": "0x001a0a@0.9"},
+        {"marco": "0xFFD700", "titulo": "gold",     "fondo": "0x1a1400@0.9"},
     ]
     paleta       = random.choice(paletas)
     color_marco  = paleta["marco"]
     color_titulo = paleta["titulo"]
     color_fondo  = paleta["fondo"]
-    color_blanco = (255, 255, 255)
-    grosor_marco = 4
 
-    # ── Detectar resolución del media ────────────────────────────
-    if es_video:
-        ancho_orig, alto_orig = obtener_resolucion(ruta_media)
-    else:
-        with Image.open(ruta_media) as img_temp:
-            ancho_orig, alto_orig = img_temp.size
-
-    ratio         = alto_orig / ancho_orig
-    altura_media  = int(1080 * ratio)
-    altura_media  = max(500, min(1300, altura_media))
-
-    # ── Dimensiones secciones ────────────────────────────────────
-    W           = 1080
-    H           = 1920
-    y_sec1      = 0
-    h_sec1      = 250
-    y_sec2      = h_sec1
-    h_sec2      = altura_media
-    y_sec3      = y_sec2 + h_sec2
-    h_sec3      = H - y_sec3
-
-    print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px")
-
-    # ── Canvas negro ─────────────────────────────────────────────
-    canvas = Image.new("RGB", (W, H), (0, 0, 0))
-    draw   = ImageDraw.Draw(canvas)
-
-    # ── Fuentes ──────────────────────────────────────────────────
-    try:
-        font_titulo_sec = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-        font_sinopsis   = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
-        font_datos_tit  = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
-        font_datos      = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
-    except:
-        font_titulo_sec = ImageFont.load_default()
-        font_sinopsis   = ImageFont.load_default()
-        font_datos_tit  = ImageFont.load_default()
-        font_datos      = ImageFont.load_default()
-
-    # ════════════════════════════════════════════════════════════
-    # SECCIÓN 1 — SINOPSIS
-    # ════════════════════════════════════════════════════════════
-    draw.rectangle([0, y_sec1, W, y_sec1 + h_sec1], fill=color_fondo)
-    draw.rectangle([0, y_sec1, W, y_sec1 + h_sec1], outline=color_marco, width=grosor_marco)
-    draw.text((30, y_sec1 + 15), "Sinopsis", font=font_titulo_sec, fill=color_titulo)
-
-    lineas_sin = textwrap.wrap(sinopsis, width=52)[:5]
-    for i, linea in enumerate(lineas_sin):
-        draw.text((30, y_sec1 + 65 + i * 34), linea, font=font_sinopsis, fill=color_blanco)
-
-    # ════════════════════════════════════════════════════════════
-    # SECCIÓN 2 — MEDIA
-    # ════════════════════════════════════════════════════════════
-    draw.rectangle([0, y_sec2, W, y_sec2 + h_sec2], outline=color_marco, width=grosor_marco)
-
-    if not es_video:
-        try:
-            media_img = Image.open(ruta_media).convert("RGB")
-            media_img = media_img.resize((W, h_sec2), Image.LANCZOS)
-            canvas.paste(media_img, (0, y_sec2))
-            draw.rectangle([0, y_sec2, W, y_sec2 + h_sec2], outline=color_marco, width=grosor_marco)
-        except Exception as e:
-            print(f"Error cargando imagen: {e}")
-
-    # ════════════════════════════════════════════════════════════
-    # SECCIÓN 3 — POSTER + DATOS
-    # ════════════════════════════════════════════════════════════
-    draw.rectangle([0, y_sec3, W, y_sec3 + h_sec3], fill=color_fondo)
-    draw.rectangle([0, y_sec3, W, y_sec3 + h_sec3], outline=color_marco, width=grosor_marco)
-
-    # Poster
-    alto_poster  = min(h_sec3 - 20, 380)
-    ancho_poster = int(alto_poster * 0.67)
-    y_poster     = y_sec3 + (h_sec3 - alto_poster) // 2
-    x_datos      = ancho_poster + 25
-
+    # ── Descargar poster ─────────────────────────────────────────
+    poster_path = "/tmp/poster.jpg"
     if poster_url:
-        try:
-            r            = requests.get(poster_url)
-            poster_img   = Image.open(io.BytesIO(r.content)).convert("RGB")
-            poster_img   = poster_img.resize((ancho_poster, alto_poster), Image.LANCZOS)
-            canvas.paste(poster_img, (10, y_poster))
-        except Exception as e:
-            print(f"Error cargando poster: {e}")
+        r = requests.get(poster_url)
+        with open(poster_path, "wb") as f:
+            f.write(r.content)
 
-    # Datos
-    y_cur = y_sec3 + 20
-    draw.text((x_datos, y_cur), "Generos", font=font_datos_tit, fill=color_titulo)
-    y_cur += 40
-    draw.text((x_datos, y_cur), generos, font=font_datos, fill=color_blanco)
-    y_cur += 40
-    draw.text((x_datos, y_cur), pais, font=font_datos, fill=color_blanco)
-    y_cur += 40
-    draw.text((x_datos, y_cur), f"{tipo}  {año}", font=font_datos, fill=color_blanco)
+    # ── Sinopsis justificada ─────────────────────────────────────
+    lineas   = justificar_lineas(sinopsis, max_chars=44, max_lineas=5)
+    salida   = "/tmp/output_video.mp4"
+    duracion = random.randint(30, 60) if not es_video else None
 
-    # Guardar frame
-    frame_path = "/tmp/frame.png"
-    canvas.save(frame_path)
-    print(f"Frame guardado: {frame_path}")
-    return frame_path
+    # ── Drawtext sinopsis ────────────────────────────────────────
+    sinopsis_filters = ""
+    v_actual = "vs0"
+    for i, linea in enumerate(lineas):
+        v_siguiente = f"vs{i+1}"
+        y_pos = 85 + (i * 34)
+        sinopsis_filters += (
+            f"[{v_actual}]drawtext=text='{linea}':fontsize=27:fontcolor=white"
+            f":x=30:y={y_pos}:shadowcolor=black:shadowx=2:shadowy=2[{v_siguiente}];"
+        )
+        v_actual = v_siguiente
 
-
-def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    """Combina el frame PNG con el video/imagen usando FFmpeg simple."""
-    frame_path = construir_frame(data, ruta_media, es_video)
-    salida     = "/tmp/output_video.mp4"
-    duracion   = random.randint(30, 60) if not es_video else None
-
-    # Detectar altura de sección 2
-    if es_video:
-        ancho_orig, alto_orig = obtener_resolucion(ruta_media)
-    else:
-        with Image.open(ruta_media) as img_temp:
-            ancho_orig, alto_orig = img_temp.size
-
-    ratio        = alto_orig / ancho_orig
-    altura_media = int(1080 * ratio)
-    altura_media = max(500, min(1300, altura_media))
-    y_sec2       = 250
+    # [0] = media, [1] = poster
+    filtros = (
+        f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
+        f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
+        f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.5:t=fill[dark];"
+        f"[dark]drawbox=x=0:y=0:w=1080:h={h_sec1}:color={color_fondo}:t=fill[sec1];"
+        f"[sec1]drawbox=x=0:y=0:w=1080:h={h_sec1}:color={color_marco}@0.9:t=4[sec1b];"
+        f"[sec1b]drawtext=text='Sinopsis':fontsize=34:fontcolor={color_titulo}"
+        f":x=30:y=20:shadowcolor=black:shadowx=2:shadowy=2[vs0];"
+        f"{sinopsis_filters}"
+        f"[{v_actual}]drawbox=x=0:y={y_sec2}:w=1080:h={h_sec2}:color={color_marco}@0.9:t=4[sec2];"
+        f"[sec2]drawbox=x=0:y={y_sec3}:w=1080:h={h_sec3}:color={color_fondo}:t=fill[sec3];"
+        f"[sec3]drawbox=x=0:y={y_sec3}:w=1080:h={h_sec3}:color={color_marco}@0.9:t=4[sec3b];"
+        f"[1:v]scale={ancho_poster}:{alto_poster}[poster];"
+        f"[sec3b][poster]overlay=10:{y_poster}[con_poster];"
+        f"[con_poster]drawtext=text='Generos':fontsize={font_tit}:fontcolor={color_titulo}"
+        f":x={x_datos}:y={y_g_label}:shadowcolor=black:shadowx=1:shadowy=1[d1];"
+        f"[d1]drawtext=text='{generos}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_g_val}[d2];"
+        f"[d2]drawtext=text='{pais}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais}[d3];"
+        f"[d3]drawtext=text='{tipo}  {año}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_tipo}[d4];"
+        f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
+    )
 
     if es_video:
         cmd = [
             "ffmpeg", "-y",
             "-i", ruta_media,
-            "-i", frame_path,
-            "-filter_complex",
-            f"[0:v]scale=1080:{altura_media}:force_original_aspect_ratio=decrease,"
-            f"pad=1080:{altura_media}:(ow-iw)/2:(oh-ih)/2[vid];"
-            f"[1:v]scale=1080:1920[frame];"
-            f"[frame][vid]overlay=0:{y_sec2}[out]",
+            "-i", poster_path,
+            "-filter_complex", filtros,
             "-map", "[out]",
             "-map", "0:a?",
             "-c:v", "libx264",
@@ -262,21 +247,19 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
             "-shortest",
             salida
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        print("STDERR:", result.stderr[-3000:])
-        if result.returncode != 0:
-            raise Exception(f"FFmpeg failed: {result.stderr[-1000:]}")
     else:
         cmd = [
             "ffmpeg", "-y",
-            "-loop", "1", "-t", str(duracion), "-i", frame_path,
+            "-loop", "1", "-t", str(duracion), "-i", ruta_media,
+            "-i", poster_path,
+            "-filter_complex", filtros,
+            "-map", "[out]",
             "-c:v", "libx264",
             "-t", str(duracion),
-            "-pix_fmt", "yuv420p",
             salida
         ]
-        subprocess.run(cmd, check=True)
 
+    subprocess.run(cmd, check=True)
     return salida
 
 

@@ -20,7 +20,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg --fix-missing
 
       - name: Install dependencies
-        run: pip install requests anthropic==0.49.0 google-genai google-api-python-client google-auth Pillow
+        run: pip install requests anthropic==0.49.0 google-genai google-api-python-client google-auth
 
       - name: Fetch movie data
         env:
