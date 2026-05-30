@@ -17,8 +17,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install FFmpeg
-        run: sudo apt-get install -y ffmpeg
-
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg --fix-missing
+        
       - name: Install dependencies
         run: pip install requests anthropic==0.49.0 google-genai google-api-python-client google-auth
 
