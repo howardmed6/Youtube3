@@ -165,9 +165,19 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     y_sec2  = 250                        # donde empieza sección media
     y_sec3  = y_sec2 + altura_media      # donde empieza sección datos
     h_sec3  = 1920 - y_sec3              # altura sección datos
-    y_poster = y_sec3 + 10               # poster dentro sección 3
-    alto_poster = h_sec3 - 20            # alto del poster
-    ancho_poster = int(alto_poster * 0.7) # mantener ratio poster
+  # Poster tamaño fijo razonable
+    alto_poster  = min(int(h_sec3 * 0.85), 350)
+    ancho_poster = int(alto_poster * 0.67)
+    y_poster     = y_sec3 + int((h_sec3 - alto_poster) / 2)
+    x_datos      = ancho_poster + 30
+
+    # Fuente proporcional al espacio
+    font_titulo_datos = min(36, max(24, h_sec3 // 6))
+    font_datos        = min(30, max(20, h_sec3 // 7))
+    y_generos_label   = y_sec3 + 20
+    y_generos_val     = y_generos_label + font_titulo_datos + 10
+    y_pais            = y_generos_val + font_datos + 15
+    y_tipo_año        = y_pais + font_datos + 15
 
     # Ajuste de fuente según espacio disponible en sección 3
     font_titulo_datos = max(24, min(36, h_sec3 // 5))
