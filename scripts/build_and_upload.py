@@ -158,35 +158,25 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     tipo       = limpiar_texto(data["tipo"])
     poster_url = data["poster_url"]
 
-    # ── Detectar resolución y calcular alturas ───────────────────
+    # ── Detectar resolución ──────────────────────────────────────
     ancho_orig, alto_orig = obtener_resolucion(ruta_media)
     altura_media = calcular_altura_media(ancho_orig, alto_orig)
 
-    y_sec2  = 250                        # donde empieza sección media
-    y_sec3  = y_sec2 + altura_media      # donde empieza sección datos
-    h_sec3  = 1920 - y_sec3              # altura sección datos
-  # Poster tamaño fijo razonable
+    # ── Calcular posiciones ──────────────────────────────────────
+    y_sec2       = 250
+    y_sec3       = y_sec2 + altura_media
+    h_sec3       = 1920 - y_sec3
     alto_poster  = min(int(h_sec3 * 0.85), 350)
     ancho_poster = int(alto_poster * 0.67)
     y_poster     = y_sec3 + int((h_sec3 - alto_poster) / 2)
     x_datos      = ancho_poster + 30
 
-    # Fuente proporcional al espacio
     font_titulo_datos = min(36, max(24, h_sec3 // 6))
     font_datos        = min(30, max(20, h_sec3 // 7))
     y_generos_label   = y_sec3 + 20
     y_generos_val     = y_generos_label + font_titulo_datos + 10
     y_pais            = y_generos_val + font_datos + 15
     y_tipo_año        = y_pais + font_datos + 15
-
-    # Ajuste de fuente según espacio disponible en sección 3
-    font_titulo_datos = max(24, min(36, h_sec3 // 5))
-    font_datos        = max(20, min(30, h_sec3 // 6))
-    y_generos_label   = y_sec3 + 15
-    y_generos_val     = y_generos_label + font_titulo_datos + 8
-    y_pais            = y_generos_val + font_datos + 20
-    y_tipo_año        = y_pais + font_datos + 20
-    x_datos           = ancho_poster + 25
 
     # ── Colores aleatorios ───────────────────────────────────────
     paletas = [
@@ -209,11 +199,11 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
             f.write(r.content)
 
     # ── Sinopsis justificada ─────────────────────────────────────
-    lineas  = justificar_lineas(sinopsis, max_chars=44, max_lineas=5)
-    salida  = "/tmp/output_video.mp4"
+    lineas   = justificar_lineas(sinopsis, max_chars=44, max_lineas=5)
+    salida   = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
 
-    # ── Drawtext sinopsis línea por línea ────────────────────────
+    # ── Drawtext sinopsis ────────────────────────────────────────
     sinopsis_filters = ""
     v_actual = "vs0"
     for i, linea in enumerate(lineas):
@@ -225,36 +215,35 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         )
         v_actual = v_siguiente
 
+    # [0] = media, [1] = poster
     filtros = (
-        # ── Base ────────────────────────────────────────────────
+        # ── Escalar media a 1080x1920 como base ─────────────────
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
         f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
-        f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.4:t=fill[dark];"
+        f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.5:t=fill[dark];"
 
-        # ── Sección 1 — Sinopsis (y=0 h=250) ────────────────────
-        f"[dark]drawbox=x=0:y=0:w=1080:h=250:color={color_fondo}:t=fill[sec1];"
-        f"[sec1]drawbox=x=0:y=0:w=1080:h=250:color={color_marco}@0.9:t=4[sec1b];"
+        # ── Sección 1 — Sinopsis ─────────────────────────────────
+        f"[dark]drawbox=x=0:y=0:w=1080:h={y_sec2}:color={color_fondo}:t=fill[sec1];"
+        f"[sec1]drawbox=x=0:y=0:w=1080:h={y_sec2}:color={color_marco}@0.9:t=4[sec1b];"
         f"[sec1b]drawtext=text='Sinopsis':fontsize=34:fontcolor={color_titulo}"
         f":x=30:y=20:shadowcolor=black:shadowx=2:shadowy=2[vs0];"
         f"{sinopsis_filters}"
 
-        # ── Sección 2 — Trailer/Imagen (dinámica) ───────────────
-        f"[{v_actual}]drawbox=x=0:y={y_sec2}:w=1080:h={altura_media}"
+        # ── Sección 2 — Media encima del base ───────────────────
+        f"[0:v]scale=1080:{altura_media}:force_original_aspect_ratio=decrease,"
+        f"pad=1080:{altura_media}:(ow-iw)/2:(oh-ih)/2[media_scaled];"
+        f"[{v_actual}][media_scaled]overlay=0:{y_sec2}[con_media];"
+
+        # ── Marco sección 2 ──────────────────────────────────────
+        f"[con_media]drawbox=x=0:y={y_sec2}:w=1080:h={altura_media}"
         f":color={color_marco}@0.9:t=4[sec2];"
 
-        # ── Overlay del video/imagen en sección 2 ───────────────
-        f"[1:v]scale=1080:{altura_media}:force_original_aspect_ratio=decrease,"
-        f"pad=1080:{altura_media}:(ow-iw)/2:(oh-ih)/2[media_scaled];"
-        f"[sec2][media_scaled]overlay=0:{y_sec2}[sec2_con_media];"
-
-        # ── Sección 3 — Poster + Datos (dinámica) ───────────────
-        f"[sec2_con_media]drawbox=x=0:y={y_sec3}:w=1080:h={h_sec3}"
-        f":color={color_fondo}:t=fill[sec3];"
-        f"[sec3]drawbox=x=0:y={y_sec3}:w=1080:h={h_sec3}"
-        f":color={color_marco}@0.9:t=4[sec3b];"
+        # ── Sección 3 — Poster + Datos ───────────────────────────
+        f"[sec2]drawbox=x=0:y={y_sec3}:w=1080:h={h_sec3}:color={color_fondo}:t=fill[sec3];"
+        f"[sec3]drawbox=x=0:y={y_sec3}:w=1080:h={h_sec3}:color={color_marco}@0.9:t=4[sec3b];"
 
         # ── Poster ───────────────────────────────────────────────
-        f"[2:v]scale={ancho_poster}:{alto_poster}[poster];"
+        f"[1:v]scale={ancho_poster}:{alto_poster}[poster];"
         f"[sec3b][poster]overlay=10:{y_poster}[con_poster];"
 
         # ── Datos ────────────────────────────────────────────────
@@ -270,16 +259,14 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
     )
 
-    # Inputs: [0] = fondo negro, [1] = media, [2] = poster
     if es_video:
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "color=black:s=1080x1920:r=30",
             "-i", ruta_media,
             "-i", poster_path,
             "-filter_complex", filtros,
             "-map", "[out]",
-            "-map", "1:a?",
+            "-map", "0:a?",
             "-c:v", "libx264",
             "-c:a", "aac",
             "-shortest",
@@ -288,7 +275,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     else:
         cmd = [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", f"color=black:s=1080x1920:r=30:d={duracion}",
             "-loop", "1", "-t", str(duracion), "-i", ruta_media,
             "-i", poster_path,
             "-filter_complex", filtros,
