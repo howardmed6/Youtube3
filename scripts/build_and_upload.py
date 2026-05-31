@@ -145,18 +145,17 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     tipo       = limpiar_texto(data["tipo"])
     poster_url = data["poster_url"]
 
-    # ── Detectar resolución y calcular alturas ───────────────────
+  # ── Detectar resolución y calcular alturas ───────────────────
     ancho_orig, alto_orig = obtener_resolucion(ruta_media)
-    ratio        = alto_orig / ancho_orig
-    altura_media = int(1080 * ratio)
-    altura_media = max(500, min(1300, altura_media))
-
+    ratio   = alto_orig / ancho_orig
+    h_sec2  = int(1080 * ratio)
+    h_sec2  = max(500, min(1300, h_sec2))
+    espacio = 1920 - h_sec2
+    h_sec1  = espacio // 2
+    h_sec3  = espacio - h_sec1
     y_sec1  = 0
-    h_sec1  = 250
     y_sec2  = h_sec1
-    h_sec2  = altura_media
     y_sec3  = y_sec2 + h_sec2
-    h_sec3  = 1920 - y_sec3
 
     print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px total={h_sec1+h_sec2+h_sec3}px")
 
