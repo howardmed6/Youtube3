@@ -199,13 +199,15 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     # Calcular fuente y lineas para ocupar todo el espacio disponible
     espacio_sinopsis = h_sec1 - 70
-    for font_sin in range(52, 16, -2):
-        line_height = int(font_sin * 1.4)
-        max_chars   = max(30, int(1800 / font_sin))
-        lineas      = justificar_lineas(sinopsis, max_chars=max_chars, max_lineas=99)
-        alto_total  = len(lineas) * line_height
-        if alto_total >= espacio_sinopsis * 0.85 and alto_total <= espacio_sinopsis:
+    ancho_texto      = 1020  # 1080 - 60px de margen
+    for font_sin in range(42, 16, -2):
+        line_height  = int(font_sin * 1.4)
+        chars_linea  = int(ancho_texto / (font_sin * 0.55))
+        max_lin      = espacio_sinopsis // line_height
+        lineas       = justificar_lineas(sinopsis, max_chars=chars_linea, max_lineas=99)
+        if len(lineas) <= max_lin:
             break
+    lineas = lineas[:max_lin]
 
     sinopsis_filters = ""
     v_actual = "vs0"
