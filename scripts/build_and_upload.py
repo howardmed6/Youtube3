@@ -222,7 +222,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         v_actual = v_siguiente
 
     # [0] = media, [1] = poster
-    filtros = (
+  filtros = (
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
         f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
         f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.5:t=fill[dark];"
@@ -238,8 +238,8 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         f"[sec3b][poster]overlay=10:{y_poster}[con_poster];"
         f"[con_poster]drawtext=text='Generos':fontsize={font_tit}:fontcolor={color_titulo}"
         f":x={x_datos}:y={y_g_label}:shadowcolor=black:shadowx=1:shadowy=1[d1];"
-        f"[d1]drawtext=text='{generos}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_g_val}[d2];"
-        f"[d2]drawtext=text='{pais}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais}[d3];"
+        f"[d1]drawtext=text='{generos[:20]}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_g_val}[d2];"
+        f"[d2]drawtext=text='{pais[:20]}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais}[d3];"
         f"[d3]drawtext=text='{tipo}  {año}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_tipo}[d4];"
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
     )
