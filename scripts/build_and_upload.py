@@ -138,7 +138,7 @@ def buscar_imagen_gemini(titulo: str) -> str:
 
 
 def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
-    sinopsis   = limpiar_texto(data["sinopsis"][:200])
+    sinopsis   = limpiar_texto(data["sinopsis"])
     generos    = limpiar_texto(", ".join(data["generos"][:3]))
     año        = data["año"]
     pais       = limpiar_texto(data["pais"][:25])
@@ -159,17 +159,17 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px total={h_sec1+h_sec2+h_sec3}px")
 
-    # Poster proporcional al espacio disponible
-    alto_poster  = min(h_sec3 - 30, 400)
+  # Poster ocupa toda la altura de sección 3
+    alto_poster  = h_sec3
     ancho_poster = int(alto_poster * 0.67)
-    y_poster     = y_sec3 + (h_sec3 - alto_poster) // 2
+    y_poster     = y_sec3
     x_datos      = ancho_poster + 25
 
-    # Fuentes proporcionales
-    font_tit  = min(38, max(28, h_sec3 // 5))
-    font_dat  = min(32, max(24, h_sec3 // 6))
+    # Fuentes más grandes
+    font_tit  = 42
+    font_dat  = 36
     y_g_label = y_sec3 + 20
-    y_g_val   = y_g_label + font_tit + 8
+    y_g_val   = y_g_label + font_tit + 10
     y_pais    = y_g_val + font_dat + 15
     y_tipo    = y_pais + font_dat + 15
 
@@ -194,7 +194,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
             f.write(r.content)
 
     # ── Sinopsis justificada ─────────────────────────────────────
-    lineas   = justificar_lineas(sinopsis, max_chars=44, max_lineas=5)
+    lineas   = justificar_lineas(sinopsis, max_chars=40, max_lineas=5)
     salida   = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
 
