@@ -281,7 +281,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if exito:
             await query.edit_message_caption(
                 caption=f"🚀 ¡Perfecto! Procesando *{estado['titulo']}*...\n\n"
-                        f"GitHub Actions está generando el short. "
+                        f"AutoShort está generando el short. "
                         f"En unos minutos estará en YouTube. ✅",
                 parse_mode="Markdown"
             )

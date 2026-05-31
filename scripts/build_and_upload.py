@@ -159,24 +159,24 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px total={h_sec1+h_sec2+h_sec3}px")
 
-  # Poster ocupa toda la altura de sección 3
+    # Poster ocupa toda la altura de sección 3
     alto_poster  = h_sec3 - 12
     ancho_poster = int(alto_poster * 0.67)
     y_poster     = y_sec3 + 8
     x_datos      = ancho_poster + 25
 
     # Distribuir datos ocupando todo el alto de sección 3
-    separacion = h_sec3 // 4
+    separacion  = h_sec3 // 4
+    font_tit    = min(48, separacion - 10)
+    font_dat    = min(42, separacion - 15)
     mitad_ancho = (1080 - x_datos) // 2
-    chars_max   = mitad_ancho // (font_dat // 2)
+    chars_max   = mitad_ancho // 18
     generos     = generos[:chars_max]
     pais        = pais[:chars_max]
-    y_g_label  = y_sec3 + (separacion * 0) + 10
-    y_g_val    = y_sec3 + (separacion * 1) + 10
-    y_pais     = y_sec3 + (separacion * 2) + 10
-    y_tipo     = y_sec3 + (separacion * 3) + 10
-    font_tit   = min(48, separacion - 10)
-    font_dat   = min(42, separacion - 15)
+    y_g_label   = y_sec3 + (separacion * 0) + 10
+    y_g_val     = y_sec3 + (separacion * 1) + 10
+    y_pais      = y_sec3 + (separacion * 2) + 10
+    y_tipo      = y_sec3 + (separacion * 3) + 10
 
     # ── Colores aleatorios ───────────────────────────────────────
     paletas = [
