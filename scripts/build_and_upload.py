@@ -222,7 +222,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         v_actual = v_siguiente
 
     # [0] = media, [1] = poster
-  filtros = (
+    filtros = (
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
         f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
         f"[base]drawbox=x=0:y=0:w=1080:h=1920:color=black@0.5:t=fill[dark];"
