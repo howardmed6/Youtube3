@@ -378,34 +378,45 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
     print("Video y plataformas enviados a Telegram")
 
 
-# def subir_a_youtube(video_path: str, metadata: dict):
-#     youtube = build("youtube", "v3", credentials=creds)
-#     body = {
-#         "snippet": {
-#             "title": metadata["titulo_yt"],
-#             "description": metadata["descripcion"],
-#             "tags": metadata["tags"],
-#             "categoryId": "24"
-#         },
-#         "status": {
-#             "privacyStatus": "public",
-#             "selfDeclaredMadeForKids": False
-#         }
-#     }
-#     media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True)
-#     request = youtube.videos().insert(
-#         part="snippet,status",
-#         body=body,
-#         media_body=media
-#     )
-#     print("Subiendo a YouTube...")
-#     response = None
-#     while response is None:
-#         status, response = request.next_chunk()
-#         if status:
-#             print(f"Subiendo... {int(status.progress() * 100)}%")
-#     print(f"Video subido: https://youtube.com/watch?v={response['id']}")
-#     return response["id"]
+def subir_a_youtube(video_path: str, metadata: dict):
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+
+    creds = Credentials(
+        token=None,
+        refresh_token=os.environ["YOUTUBE_REFRESH_TOKEN"],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id="319336541942-i50fopgpolavvvdbqpbhq2n74at25kso.apps.googleusercontent.com",
+        client_secret=os.environ["YOUTUBE_CLIENT_SECRET_VALUE"]
+    )
+    creds.refresh(Request())
+    youtube = build("youtube", "v3", credentials=creds)
+    body = {
+        "snippet": {
+            "title": metadata["titulo_yt"],
+            "description": metadata["descripcion"],
+            "tags": metadata["tags"],
+            "categoryId": "24"
+        },
+        "status": {
+            "privacyStatus": "public",
+            "selfDeclaredMadeForKids": False
+        }
+    }
+    media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True)
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media
+    )
+    print("Subiendo a YouTube...")
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"Subiendo... {int(status.progress() * 100)}%")
+    print(f"Video subido: https://youtube.com/watch?v={response['id']}")
+    return response["id"]
 
 
 def main():
@@ -438,7 +449,7 @@ def main():
 
     mandar_a_telegram(video_path, data, metadata)
 
-    # subir_a_youtube(video_path, metadata)
+    subir_a_youtube(video_path, metadata)
 
 
 if __name__ == "__main__":
