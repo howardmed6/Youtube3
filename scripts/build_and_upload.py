@@ -167,6 +167,10 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     # Distribuir datos ocupando todo el alto de sección 3
     separacion = h_sec3 // 4
+    mitad_ancho = (1080 - x_datos) // 2
+    chars_max   = mitad_ancho // (font_dat // 2)
+    generos     = generos[:chars_max]
+    pais        = pais[:chars_max]
     y_g_label  = y_sec3 + (separacion * 0) + 10
     y_g_val    = y_sec3 + (separacion * 1) + 10
     y_pais     = y_sec3 + (separacion * 2) + 10
@@ -238,8 +242,8 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         f"[sec3b][poster]overlay=10:{y_poster}[con_poster];"
         f"[con_poster]drawtext=text='Generos':fontsize={font_tit}:fontcolor={color_titulo}"
         f":x={x_datos}:y={y_g_label}:shadowcolor=black:shadowx=1:shadowy=1[d1];"
-        f"[d1]drawtext=text='{generos[:20]}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_g_val}[d2];"
-        f"[d2]drawtext=text='{pais[:20]}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais}[d3];"
+        f"[d1]drawtext=text='{generos}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_g_val}[d2];"
+        f"[d2]drawtext=text='{pais}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais}[d3];"
         f"[d3]drawtext=text='{tipo}  {año}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_tipo}[d4];"
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
     )
