@@ -160,9 +160,9 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px total={h_sec1+h_sec2+h_sec3}px")
 
   # Poster ocupa toda la altura de sección 3
-    alto_poster  = h_sec3
+    alto_poster  = h_sec3 - 8
     ancho_poster = int(alto_poster * 0.67)
-    y_poster     = y_sec3
+    y_poster     = y_sec3 + 4
     x_datos      = ancho_poster + 25
 
     # Fuentes más grandes
@@ -205,7 +205,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         v_siguiente = f"vs{i+1}"
         y_pos = 85 + (i * 34)
         sinopsis_filters += (
-            f"[{v_actual}]drawtext=text='{linea}':fontsize=32:fontcolor=white"
+            f"[{v_actual}]drawtext=text='{linea}':fontsize=38:fontcolor=white"
             f":x=30:y={y_pos}:shadowcolor=black:shadowx=2:shadowy=2[{v_siguiente}];"
         )
         v_actual = v_siguiente
