@@ -386,8 +386,8 @@ def subir_a_youtube(video_path: str, metadata: dict):
         token=None,
         refresh_token=os.environ["YOUTUBE_REFRESH_TOKEN"],
         token_uri="https://oauth2.googleapis.com/token",
-        client_id="319336541942-i50fopgpolavvvdbqpbhq2n74at25kso.apps.googleusercontent.com",
-        client_secret=os.environ["YOUTUBE_CLIENT_SECRET_VALUE"]
+        client_id="319336541942-viq6kp008eolvngq6afr4vmh2h2fh8bq.apps.googleusercontent.com",
+        client_secret=os.environ["YOUTUBE_CLIENT_SECRET"]
     )
     creds.refresh(Request())
     youtube = build("youtube", "v3", credentials=creds)
