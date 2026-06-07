@@ -145,7 +145,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     tipo       = limpiar_texto(data["tipo"])
     poster_url = data["poster_url"]
 
-  # ── Detectar resolución y calcular alturas ───────────────────
     ancho_orig, alto_orig = obtener_resolucion(ruta_media)
     ratio   = alto_orig / ancho_orig
     h_sec2  = int(1080 * ratio)
@@ -159,13 +158,11 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
 
     print(f"Layout: sec1={h_sec1}px sec2={h_sec2}px sec3={h_sec3}px total={h_sec1+h_sec2+h_sec3}px")
 
-    # Poster ocupa toda la altura de sección 3
     alto_poster  = h_sec3 - 12
     ancho_poster = int(alto_poster * 0.67)
     y_poster     = y_sec3 + 8
     x_datos      = ancho_poster + 25
 
-    # Distribuir datos ocupando todo el alto de sección 3
     separacion  = h_sec3 // 4
     font_tit    = min(48, separacion - 10)
     font_dat    = min(42, separacion - 15)
@@ -177,7 +174,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     y_pais      = y_sec3 + (separacion * 2) + 10
     y_tipo      = y_sec3 + (separacion * 3) + 10
 
-    # ── Colores aleatorios ───────────────────────────────────────
     paletas = [
         {"marco": "0x00FFFF", "titulo": "cyan",     "fondo": "0x001a1a@0.9"},
         {"marco": "0xFF6B00", "titulo": "orange",   "fondo": "0x1a0a00@0.9"},
@@ -190,20 +186,17 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
     color_titulo = paleta["titulo"]
     color_fondo  = paleta["fondo"]
 
-    # ── Descargar poster ─────────────────────────────────────────
     poster_path = "/tmp/poster.jpg"
     if poster_url:
         r = requests.get(poster_url)
         with open(poster_path, "wb") as f:
             f.write(r.content)
 
-    # ── Sinopsis justificada ─────────────────────────────────────
     salida   = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
 
-    # Calcular fuente y lineas para ocupar todo el espacio disponible
     espacio_sinopsis = h_sec1 - 70
-    ancho_texto      = 1020  # 1080 - 60px de margen
+    ancho_texto      = 1020
     for font_sin in range(120, 16, -2):
         line_height  = int(font_sin * 1.4)
         chars_linea  = int(ancho_texto / (font_sin * 0.55))
@@ -224,7 +217,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         )
         v_actual = v_siguiente
 
-    # [0] = media, [1] = poster
     filtros = (
         f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
         f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base];"
@@ -350,16 +342,14 @@ Responde SOLO en este formato JSON exacto:
 
 
 def mandar_a_telegram(video_path: str, data: dict, metadata: dict, video_id: str = None):
-    plataformas_pago = ", ".join(data["plataformas"]["pago"]) or "No disponible"
+    plataformas_pago   = ", ".join(data["plataformas"]["pago"]) or "No disponible"
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"]) or "No disponible"
-    
-    # Creamos el link de YouTube
     link_youtube = f"https://youtube.com/watch?v={video_id}" if video_id else "Subiendo..."
 
     url_msg = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     mensaje = (
         f"🎬 *{data['titulo']}* ({data['año']})\n\n"
-        f"🔗 *YouTube:* {link_youtube}\n\n" # <--- Aquí recibirás el enlace
+        f"🔗 *YouTube:* {link_youtube}\n\n"
         f"💰 Pago: {plataformas_pago}\n"
         f"🆓 Gratis: {plataformas_gratis}\n\n"
         f"📝 *Título:* {metadata['titulo_yt']}"
@@ -378,23 +368,23 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict, video_id: str
             "parse_mode": "Markdown"
         }, files={"video": video})
     print("Video y link enviados a Telegram")
-    
+
+
 def publicar_comentario_youtube(youtube, video_id, data):
-    pago = ", ".join(data["plataformas"]["pago"][:3])
+    pago   = ", ".join(data["plataformas"]["pago"][:3])
     gratis = ", ".join(data["plataformas"]["gratis"][:3])
-    
     texto = (
         f"🎬 ¿Dónde ver esta película?\n"
         f"💰 Disponible en: {pago}\n"
         f"🆓 Gratis en: {gratis}\n\n"
         "¡Suscríbete para más recomendaciones diarias!"
     )
-    
     youtube.commentThreads().insert(
         part="snippet",
         body={"snippet": {"videoId": video_id, "topLevelComment": {"snippet": {"textOriginal": texto}}}}
     ).execute()
     print("Comentario informativo publicado en YouTube")
+
 
 def subir_a_youtube(video_path: str, metadata: dict):
     from google.oauth2.credentials import Credentials
@@ -434,14 +424,13 @@ def subir_a_youtube(video_path: str, metadata: dict):
         if status:
             print(f"Subiendo... {int(status.progress() * 100)}%")
     print(f"Video subido: https://youtube.com/watch?v={response['id']}")
-    return response["id"]
+    return response["id"], youtube
 
 
 def subir_a_tiktok(video_path: str, metadata: dict):
     access_token  = os.environ["TIKTOK_ACCESS_TOKEN"]
     video_size    = os.path.getsize(video_path)
 
-    # Paso 1: Iniciar upload
     init_data = json.dumps({
         "source_info": {
             "source": "FILE_UPLOAD",
@@ -459,12 +448,11 @@ def subir_a_tiktok(video_path: str, metadata: dict):
             "Content-Type": "application/json"
         }
     )
-    init_resp = init_req.json()
+    init_resp  = init_req.json()
     upload_url = init_resp["data"]["upload_url"]
     publish_id = init_resp["data"]["publish_id"]
     print(f"TikTok upload iniciado: {publish_id}")
 
-    # Paso 2: Subir video
     with open(video_path, "rb") as f:
         video_data = f.read()
 
@@ -478,6 +466,7 @@ def subir_a_tiktok(video_path: str, metadata: dict):
     )
     print(f"TikTok video subido: {publish_id}")
 
+
 def log_telegram(mensaje: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     requests.post(url, json={
@@ -488,15 +477,56 @@ def log_telegram(mensaje: str):
     print(mensaje)
 
 
+def preguntar_plataformas() -> str:
+    """Envía un mensaje a Telegram con botones inline y espera la respuesta del usuario."""
+    url_send = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    requests.post(url_send, json={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": "📤 *¿Dónde quieres publicar el video?*",
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": [[
+                {"text": "▶️ Solo YouTube", "callback_data": "solo_youtube"},
+                {"text": "▶️ YouTube + TikTok", "callback_data": "youtube_tiktok"}
+            ]]
+        }
+    })
+
+    # Esperar respuesta con long polling
+    url_updates = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    offset = None
+    print("Esperando respuesta del usuario en Telegram...")
+
+    while True:
+        params = {"timeout": 30, "allowed_updates": ["callback_query"]}
+        if offset:
+            params["offset"] = offset
+        resp = requests.get(url_updates, params=params).json()
+        for update in resp.get("result", []):
+            offset = update["update_id"] + 1
+            if "callback_query" in update:
+                respuesta = update["callback_query"]["data"]
+                # Confirmar al usuario que se recibió
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
+                    json={"callback_query_id": update["callback_query"]["id"], "text": "✅ Recibido"}
+                )
+                return respuesta
+
+
 def main():
     with open("movie_data.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    modo     = int(data["modo"])
-    generos  = data["generos"]
+    modo    = int(data["modo"])
+    generos = data["generos"]
     es_video = False
 
     log_telegram(f"🚀 *Iniciando proceso*\n📽️ Título: *{data['titulo']}* ({data['año']})\n⚙️ Modo: {modo}")
+
+    # ── Pregunta de plataformas ──────────────────────────────────
+    destino = preguntar_plataformas()
+    log_telegram(f"📌 Destino seleccionado: *{'Solo YouTube' if destino == 'solo_youtube' else 'YouTube + TikTok'}*")
 
     if modo == 1:
         log_telegram("📥 Descargando archivo desde Google Drive...")
@@ -528,31 +558,22 @@ def main():
     log_telegram(f"✅ Metadata generada\n📝 Título YT: *{metadata['titulo_yt']}*")
 
     log_telegram("📤 Subiendo video a YouTube...")
-    video_id_youtube = subir_a_youtube(video_path, metadata)
+    video_id_youtube, yt_service = subir_a_youtube(video_path, metadata)
     log_telegram(f"✅ Video publicado en YouTube\n🔗 https://youtube.com/watch?v={video_id_youtube}")
 
     log_telegram("💬 Publicando comentario informativo en YouTube...")
-    from google.oauth2.credentials import Credentials
-    from google.auth.transport.requests import Request
-    creds = Credentials(
-        token=None,
-        refresh_token=os.environ["YOUTUBE_REFRESH_TOKEN"],
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id="319336541942-viq6kp008eolvngq6afr4vmh2h2fh8bq.apps.googleusercontent.com",
-        client_secret=os.environ["YOUTUBE_CLIENT_SECRET"]
-    )
-    creds.refresh(Request())
-    yt_service = build("youtube", "v3", credentials=creds)
     publicar_comentario_youtube(yt_service, video_id_youtube, data)
     log_telegram("✅ Comentario publicado en YouTube")
+
+    if destino == "youtube_tiktok":
+        log_telegram("📤 Subiendo video a TikTok...")
+        subir_a_tiktok(video_path, metadata)
+        log_telegram("✅ Video subido a TikTok")
 
     log_telegram("📨 Enviando resumen final a Telegram...")
     mandar_a_telegram(video_path, data, metadata, video_id=video_id_youtube)
 
     log_telegram("🏁 *Proceso completado exitosamente* ✅")
-
-    subir_a_tiktok(video_path, metadata)
-    log_telegram("✅ Video subido a TikTok")
 
 
 if __name__ == "__main__":
