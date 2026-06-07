@@ -419,6 +419,47 @@ def subir_a_youtube(video_path: str, metadata: dict):
     return response["id"]
 
 
+def subir_a_tiktok(video_path: str, metadata: dict):
+    access_token  = os.environ["TIKTOK_ACCESS_TOKEN"]
+    video_size    = os.path.getsize(video_path)
+
+    # Paso 1: Iniciar upload
+    init_data = json.dumps({
+        "source_info": {
+            "source": "FILE_UPLOAD",
+            "video_size": video_size,
+            "chunk_size": video_size,
+            "total_chunk_count": 1
+        }
+    }).encode()
+
+    init_req = requests.post(
+        "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+        data=init_data,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+    )
+    init_resp = init_req.json()
+    upload_url = init_resp["data"]["upload_url"]
+    publish_id = init_resp["data"]["publish_id"]
+    print(f"TikTok upload iniciado: {publish_id}")
+
+    # Paso 2: Subir video
+    with open(video_path, "rb") as f:
+        video_data = f.read()
+
+    requests.put(
+        upload_url,
+        data=video_data,
+        headers={
+            "Content-Type": "video/mp4",
+            "Content-Range": f"bytes 0-{video_size-1}/{video_size}"
+        }
+    )
+    print(f"TikTok video subido: {publish_id}")
+
 def main():
     with open("movie_data.json", "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -449,7 +490,10 @@ def main():
 
     mandar_a_telegram(video_path, data, metadata)
 
-    subir_a_youtube(video_path, metadata)
+    # subir_a_youtube(video_path, metadata)
+    print("Subiendo a TikTok despues de YouTube...")
+    subir_a_tiktok(video_path, metadata)
+    print("Video subido a TikTok exitosamente")
 
 
 if __name__ == "__main__":
