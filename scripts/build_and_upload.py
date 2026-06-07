@@ -349,17 +349,20 @@ Responde SOLO en este formato JSON exacto:
     return json.loads(texto)
 
 
-def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
-    plataformas_pago   = ", ".join(data["plataformas"]["pago"]) or "No disponible"
+def mandar_a_telegram(video_path: str, data: dict, metadata: dict, video_id: str = None):
+    plataformas_pago = ", ".join(data["plataformas"]["pago"]) or "No disponible"
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"]) or "No disponible"
+    
+    # Creamos el link de YouTube
+    link_youtube = f"https://youtube.com/watch?v={video_id}" if video_id else "Subiendo..."
 
     url_msg = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     mensaje = (
         f"🎬 *{data['titulo']}* ({data['año']})\n\n"
-        f"📺 *Donde ver:*\n"
+        f"🔗 *YouTube:* {link_youtube}\n\n" # <--- Aquí recibirás el enlace
         f"💰 Pago: {plataformas_pago}\n"
         f"🆓 Gratis: {plataformas_gratis}\n\n"
-        f"📝 *YouTube:* {metadata['titulo_yt']}"
+        f"📝 *Título:* {metadata['titulo_yt']}"
     )
     requests.post(url_msg, json={
         "chat_id": TELEGRAM_CHAT_ID,
@@ -371,12 +374,27 @@ def mandar_a_telegram(video_path: str, data: dict, metadata: dict):
     with open(video_path, "rb") as video:
         requests.post(url_vid, data={
             "chat_id": TELEGRAM_CHAT_ID,
-            "caption": f"✅ *{data['titulo']}* — Listo para YouTube",
+            "caption": f"✅ *{data['titulo']}* — Publicado",
             "parse_mode": "Markdown"
         }, files={"video": video})
-
-    print("Video y plataformas enviados a Telegram")
-
+    print("Video y link enviados a Telegram")
+    
+def publicar_comentario_youtube(youtube, video_id, data):
+    pago = ", ".join(data["plataformas"]["pago"][:3])
+    gratis = ", ".join(data["plataformas"]["gratis"][:3])
+    
+    texto = (
+        f"🎬 ¿Dónde ver esta película?\n"
+        f"💰 Disponible en: {pago}\n"
+        f"🆓 Gratis en: {gratis}\n\n"
+        "¡Suscríbete para más recomendaciones diarias!"
+    )
+    
+    youtube.commentThreads().insert(
+        part="snippet",
+        body={"snippet": {"videoId": video_id, "topLevelComment": {"snippet": {"textOriginal": texto}}}}
+    ).execute()
+    print("Comentario informativo publicado en YouTube")
 
 def subir_a_youtube(video_path: str, metadata: dict):
     from google.oauth2.credentials import Credentials
@@ -460,6 +478,16 @@ def subir_a_tiktok(video_path: str, metadata: dict):
     )
     print(f"TikTok video subido: {publish_id}")
 
+def log_telegram(mensaje: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    requests.post(url, json={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": mensaje,
+        "parse_mode": "Markdown"
+    })
+    print(mensaje)
+
+
 def main():
     with open("movie_data.json", "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -468,32 +496,63 @@ def main():
     generos  = data["generos"]
     es_video = False
 
-    print(f"Procesando: {data['titulo']} — Modo {modo}")
+    log_telegram(f"🚀 *Iniciando proceso*\n📽️ Título: *{data['titulo']}* ({data['año']})\n⚙️ Modo: {modo}")
 
     if modo == 1:
+        log_telegram("📥 Descargando archivo desde Google Drive...")
         ruta_media, ext = descargar_desde_drive()
         es_video = ext in [".mp4", ".mov", ".avi", ".mkv"]
+        log_telegram(f"✅ Archivo descargado: `{ext}` — {'Video' if es_video else 'Imagen'}")
     elif modo == 2:
+        log_telegram("📥 Descargando video desde Google Drive...")
         ruta_media, ext = descargar_desde_drive()
         es_video = True
+        log_telegram(f"✅ Video descargado: `{ext}`")
     elif modo == 3:
+        log_telegram(f"🔍 Buscando imagen con Gemini para *{data['titulo']}*...")
         ruta_media = buscar_imagen_gemini(data["titulo"])
         es_video = False
+        log_telegram("✅ Imagen obtenida desde Gemini")
 
+    log_telegram("🎬 Construyendo video con FFmpeg...")
     video_path = construir_video(data, ruta_media, es_video)
+    log_telegram("✅ Video construido correctamente")
 
     if not es_video:
+        log_telegram("🎵 Agregando música de fondo...")
         video_path = agregar_audio(video_path, generos)
+        log_telegram("✅ Audio agregado")
 
+    log_telegram("🤖 Generando metadata con Claude...")
     metadata = generar_metadata(data)
-    print(f"Titulo YT: {metadata['titulo_yt']}")
+    log_telegram(f"✅ Metadata generada\n📝 Título YT: *{metadata['titulo_yt']}*")
 
-    mandar_a_telegram(video_path, data, metadata)
+    log_telegram("📤 Subiendo video a YouTube...")
+    video_id_youtube = subir_a_youtube(video_path, metadata)
+    log_telegram(f"✅ Video publicado en YouTube\n🔗 https://youtube.com/watch?v={video_id_youtube}")
 
-    subir_a_youtube(video_path, metadata)
-    print("Subiendo a TikTok despues de YouTube...")
-    # subir_a_tiktok(video_path, metadata)
-    print("Video subido a TikTok exitosamente")
+    log_telegram("💬 Publicando comentario informativo en YouTube...")
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    creds = Credentials(
+        token=None,
+        refresh_token=os.environ["YOUTUBE_REFRESH_TOKEN"],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id="319336541942-viq6kp008eolvngq6afr4vmh2h2fh8bq.apps.googleusercontent.com",
+        client_secret=os.environ["YOUTUBE_CLIENT_SECRET"]
+    )
+    creds.refresh(Request())
+    yt_service = build("youtube", "v3", credentials=creds)
+    publicar_comentario_youtube(yt_service, video_id_youtube, data)
+    log_telegram("✅ Comentario publicado en YouTube")
+
+    log_telegram("📨 Enviando resumen final a Telegram...")
+    mandar_a_telegram(video_path, data, metadata, video_id=video_id_youtube)
+
+    log_telegram("🏁 *Proceso completado exitosamente* ✅")
+
+    subir_a_tiktok(video_path, metadata)
+    log_telegram("✅ Video subido a TikTok")
 
 
 if __name__ == "__main__":
