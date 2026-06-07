@@ -490,9 +490,9 @@ def main():
 
     mandar_a_telegram(video_path, data, metadata)
 
-    # subir_a_youtube(video_path, metadata)
+    subir_a_youtube(video_path, metadata)
     print("Subiendo a TikTok despues de YouTube...")
-    subir_a_tiktok(video_path, metadata)
+    # subir_a_tiktok(video_path, metadata)
     print("Video subido a TikTok exitosamente")
 
 
