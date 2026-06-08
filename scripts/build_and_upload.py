@@ -493,9 +493,11 @@ def subir_a_youtube(video_path: str, metadata: dict):
     return response["id"], youtube
 
 
+import requests
+import os
+
 def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
     video_size = os.path.getsize(video_path)
-    # Aseguramos que el título cumpla con los límites
     titulo = metadata_tiktok.get("titulo_tiktok", "Video subido automáticamente")[:150]
 
     headers_json = {
@@ -503,15 +505,18 @@ def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
         "Content-Type": "application/json; charset=UTF-8"
     }
 
-    # ── Paso 1: Init - Usamos los parámetros que permiten guardar datos ──
-    print("TikTok: iniciando subida con metadata...")
+    # ── Paso 1: Init para DRAFT (Borrador) ──
+    print("TikTok: Iniciando creación de borrador...")
+    
+    # IMPORTANTE: Se usa el endpoint de DRAFT
+    url_init = "https://open.tiktokapis.com/v2/post/publish/draft/init/"
+    
     init_resp = requests.post(
-        "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        url_init,
         headers=headers_json,
         json={
             "post_info": {
                 "title": titulo,
-                "privacy_level": "SELF_ONLY", # Privado para evitar errores de permisos públicos
                 "disable_duet": False,
                 "disable_comment": False,
                 "disable_stitch": False
@@ -527,18 +532,23 @@ def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
     
     init_data = init_resp.json()
     
-    # Si sigue dando 401 aquí, es porque la app NO tiene permiso para post_info
+    # Manejo de error específico
     if init_resp.status_code != 200:
-        raise Exception(f"Fallo en init: {init_data}")
+        # Aquí es donde te saldrá el error de scope si no tienes el permiso
+        raise Exception(f"Fallo en init (DRAFT): {init_data}")
 
     upload_url = init_data["data"]["upload_url"]
     publish_id = init_data["data"]["publish_id"]
 
     # ── Paso 2: Subida ──
+    # Esta parte se mantiene igual, el archivo se sube a la URL temporal proporcionada
     with open(video_path, "rb") as f:
-        requests.put(upload_url, data=f, headers={"Content-Type": "video/mp4"})
+        upload_resp = requests.put(upload_url, data=f, headers={"Content-Type": "video/mp4"})
     
-    print(f"✅ Video subido. ID: {publish_id}")
+    if upload_resp.status_code != 200:
+        raise Exception(f"Fallo al subir el archivo binario: {upload_resp.text}")
+    
+    print(f"✅ Video subido como BORRADOR. ID: {publish_id}")
     return publish_id
  
 def log_telegram(mensaje: str):
