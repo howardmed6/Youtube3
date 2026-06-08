@@ -10,12 +10,14 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google import genai
 import io
+from datetime import datetime
 
 # ─── Variables de entorno ────────────────────────────────────────
 CLAUDE_API_KEY          = os.environ["CLAUDE_API_KEY"]
 GEMINI_API_KEY          = os.environ["GEMINI_API_KEY"]
 GOOGLE_CREDENTIALS_JSON = os.environ["GOOGLE_CREDENTIALS_JSON"]
 YOUTUBE_CLIENT_SECRET   = os.environ["YOUTUBE_CLIENT_SECRET"]
+
 TELEGRAM_BOT_TOKEN      = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID        = os.environ["TELEGRAM_CHAT_ID"]
 DRIVE_FOLDER_ID         = "1NLhq9q1wxmfTpydDv72Iu4LRt3SoJ-tO"
@@ -341,6 +343,70 @@ Responde SOLO en este formato JSON exacto:
     return json.loads(texto)
 
 
+def generar_metadata_tiktok(data: dict) -> dict:
+    """Genera metadata optimizada para TikTok con hashtags virales embebidos en el título."""
+    titulo           = data["titulo"]
+    sinopsis         = data["sinopsis"]
+    generos          = ", ".join(data["generos"])
+    plataformas_pago = data["plataformas"]["pago"]
+    año_actual       = datetime.now().year
+
+    # Detectar plataformas conocidas para hashtags específicos
+    hashtags_plataforma = []
+    plataformas_lower = [p.lower() for p in plataformas_pago]
+    if any("netflix" in p for p in plataformas_lower):
+        hashtags_plataforma.append(f"#Netflix #Netflix{año_actual}")
+    if any("hbo" in p or "max" in p for p in plataformas_lower):
+        hashtags_plataforma.append(f"#HBOMax #Max")
+    if any("disney" in p for p in plataformas_lower):
+        hashtags_plataforma.append(f"#DisneyPlus")
+    if any("prime" in p or "amazon" in p for p in plataformas_lower):
+        hashtags_plataforma.append(f"#PrimeVideo #AmazonPrime")
+    if any("apple" in p for p in plataformas_lower):
+        hashtags_plataforma.append(f"#AppleTVPlus")
+
+    hashtags_extra = " ".join(hashtags_plataforma)
+
+    msg = claude.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=300,
+        messages=[{
+            "role": "user",
+            "content": f"""Genera el titulo para un video de TikTok recomendando esta pelicula o serie.
+Titulo: {titulo}
+Sinopsis: {sinopsis}
+Generos: {generos}
+Plataformas donde se ve: {", ".join(plataformas_pago)}
+Año actual: {año_actual}
+Hashtags de plataforma ya detectados: {hashtags_extra}
+
+Reglas estrictas:
+- El titulo debe ser un gancho corto e impactante (maximo 80 caracteres sin contar hashtags)
+- Agrega al final hashtags virales en ESPAÑOL e INGLES mezclados
+- Incluye siempre: #peliculas #pelicula #series #recomendacion #fyp #foryou #parati
+- Si es Netflix incluye: #Netflix #Netflix{año_actual}
+- Si hay otras plataformas usa sus hashtags correspondientes
+- Añade hashtags del genero en español e ingles (ej: #terror #horror #accion #action)
+- Añade #{año_actual} y #quevertiktok #quedver
+- Total del texto (titulo + hashtags) maximo 150 caracteres
+
+Responde SOLO en este formato JSON exacto sin ningun texto adicional:
+{{
+  "titulo_tiktok": "gancho impactante #hashtag1 #hashtag2 #hashtag3 ..."
+}}"""
+        }]
+    )
+    texto = msg.content[0].text.strip()
+    texto = texto.replace("```json", "").replace("```", "").strip()
+    result = json.loads(texto)
+
+    # Asegurar que no excede 150 chars (límite de TikTok)
+    if len(result["titulo_tiktok"]) > 150:
+        result["titulo_tiktok"] = result["titulo_tiktok"][:147] + "..."
+
+    return result
+
+
 def mandar_a_telegram(video_path: str, data: dict, metadata: dict, video_id: str = None):
     plataformas_pago   = ", ".join(data["plataformas"]["pago"]) or "No disponible"
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"]) or "No disponible"
@@ -427,44 +493,89 @@ def subir_a_youtube(video_path: str, metadata: dict):
     return response["id"], youtube
 
 
-def subir_a_tiktok(video_path: str, metadata: dict):
-    access_token  = os.environ["TIKTOK_ACCESS_TOKEN"]
-    video_size    = os.path.getsize(video_path)
+def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
+    """
+    Sube y publica un video en TikTok usando Content Posting API v2.
+    Flujo completo: init → upload chunk → publish.
+    """
+    video_size = os.path.getsize(video_path)
+    titulo     = metadata_tiktok["titulo_tiktok"]
 
-    init_data = json.dumps({
-        "source_info": {
-            "source": "FILE_UPLOAD",
-            "video_size": video_size,
-            "chunk_size": video_size,
-            "total_chunk_count": 1
-        }
-    }).encode()
+    headers_json = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json; charset=UTF-8"
+    }
 
-    init_req = requests.post(
-        "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-        data=init_data,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
+    # ── Paso 1: Init ────────────────────────────────────────────
+    print("TikTok: iniciando subida...")
+    init_resp = requests.post(
+        "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        headers=headers_json,
+        json={
+            "post_info": {
+                "title": titulo,
+                "privacy_level": "PUBLIC_TO_EVERYONE",
+                "disable_duet": False,
+                "disable_comment": False,
+                "disable_stitch": False,
+            },
+            "source_info": {
+                "source": "FILE_UPLOAD",
+                "video_size": video_size,
+                "chunk_size": video_size,
+                "total_chunk_count": 1
+            }
         }
     )
-    init_resp  = init_req.json()
-    upload_url = init_resp["data"]["upload_url"]
-    publish_id = init_resp["data"]["publish_id"]
-    print(f"TikTok upload iniciado: {publish_id}")
+    init_data = init_resp.json()
+    print(f"TikTok init response: {init_data}")
 
+    if init_resp.status_code != 200 or "data" not in init_data:
+        raise Exception(f"TikTok init fallido: {init_data}")
+
+    upload_url = init_data["data"]["upload_url"]
+    publish_id = init_data["data"]["publish_id"]
+    print(f"TikTok publish_id: {publish_id}")
+
+    # ── Paso 2: Upload del chunk ─────────────────────────────────
+    print("TikTok: subiendo video...")
     with open(video_path, "rb") as f:
         video_data = f.read()
 
-    requests.put(
+    upload_resp = requests.put(
         upload_url,
         data=video_data,
         headers={
             "Content-Type": "video/mp4",
-            "Content-Range": f"bytes 0-{video_size-1}/{video_size}"
+            "Content-Range": f"bytes 0-{video_size - 1}/{video_size}"
         }
     )
-    print(f"TikTok video subido: {publish_id}")
+    print(f"TikTok upload status: {upload_resp.status_code}")
+    if upload_resp.status_code not in (200, 201, 206):
+        raise Exception(f"TikTok upload fallido: {upload_resp.text}")
+
+    # ── Paso 3: Verificar estado hasta que esté listo ─────────────
+    import time
+    print("TikTok: verificando estado de publicacion...")
+    for intento in range(10):
+        time.sleep(5)
+        status_resp = requests.post(
+            "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
+            headers=headers_json,
+            json={"publish_id": publish_id}
+        )
+        status_data = status_resp.json()
+        print(f"TikTok status intento {intento + 1}: {status_data}")
+
+        estado = status_data.get("data", {}).get("status", "")
+        if estado == "PUBLISH_COMPLETE":
+            print(f"TikTok: video publicado correctamente (publish_id: {publish_id})")
+            return publish_id
+        elif estado in ("FAILED", "PUBLISH_FAILED"):
+            raise Exception(f"TikTok publicacion fallida: {status_data}")
+        # Si sigue en PROCESSING_UPLOAD / PROCESSING_DOWNLOAD continuar esperando
+
+    raise Exception("TikTok: timeout esperando confirmacion de publicacion")
 
 
 def log_telegram(mensaje: str):
@@ -478,7 +589,7 @@ def log_telegram(mensaje: str):
 
 
 def preguntar_plataformas() -> str:
-    """Envía un mensaje a Telegram con botones inline y espera la respuesta del usuario."""
+    """Envía mensaje con botones y espera selección del usuario."""
     url_send = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     requests.post(url_send, json={
         "chat_id": TELEGRAM_CHAT_ID,
@@ -492,7 +603,6 @@ def preguntar_plataformas() -> str:
         }
     })
 
-    # Esperar respuesta con long polling
     url_updates = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
     offset = None
     print("Esperando respuesta del usuario en Telegram...")
@@ -506,12 +616,49 @@ def preguntar_plataformas() -> str:
             offset = update["update_id"] + 1
             if "callback_query" in update:
                 respuesta = update["callback_query"]["data"]
-                # Confirmar al usuario que se recibió
                 requests.post(
                     f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
                     json={"callback_query_id": update["callback_query"]["id"], "text": "✅ Recibido"}
                 )
                 return respuesta
+
+
+def pedir_token_tiktok() -> str:
+    """
+    Pide al usuario que envíe el access token de TikTok por Telegram.
+    Se usa porque el token vence cada 24h y no se puede guardar en env.
+    """
+    url_send = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    requests.post(url_send, json={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": (
+            "🔑 *Token de TikTok requerido*\n\n"
+            "El token vence cada 24h\\. Por favor envía tu `access_token` "
+            "de TikTok ahora mismo como mensaje de texto\\."
+        ),
+        "parse_mode": "MarkdownV2"
+    })
+
+    url_updates = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    offset = None
+    print("Esperando token de TikTok del usuario en Telegram...")
+
+    while True:
+        params = {"timeout": 60, "allowed_updates": ["message"]}
+        if offset:
+            params["offset"] = offset
+        resp = requests.get(url_updates, params=params).json()
+        for update in resp.get("result", []):
+            offset = update["update_id"] + 1
+            if "message" in update and "text" in update["message"]:
+                token = update["message"]["text"].strip()
+                # Confirmación
+                requests.post(url_send, json={
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": "✅ Token recibido, continuando con TikTok...",
+                    "parse_mode": "Markdown"
+                })
+                return token
 
 
 def main():
@@ -527,6 +674,12 @@ def main():
     # ── Pregunta de plataformas ──────────────────────────────────
     destino = preguntar_plataformas()
     log_telegram(f"📌 Destino seleccionado: *{'Solo YouTube' if destino == 'solo_youtube' else 'YouTube + TikTok'}*")
+
+    # ── Si es TikTok, pedir token inmediatamente ─────────────────
+    tiktok_token = None
+    if destino == "youtube_tiktok":
+        tiktok_token = pedir_token_tiktok()
+        log_telegram("🔑 Token de TikTok recibido correctamente")
 
     if modo == 1:
         log_telegram("📥 Descargando archivo desde Google Drive...")
@@ -555,7 +708,14 @@ def main():
 
     log_telegram("🤖 Generando metadata con Claude...")
     metadata = generar_metadata(data)
-    log_telegram(f"✅ Metadata generada\n📝 Título YT: *{metadata['titulo_yt']}*")
+    log_telegram(f"✅ Metadata YouTube generada\n📝 Título YT: *{metadata['titulo_yt']}*")
+
+    # ── Metadata TikTok si aplica ────────────────────────────────
+    metadata_tiktok = None
+    if destino == "youtube_tiktok":
+        log_telegram("🤖 Generando metadata optimizada para TikTok...")
+        metadata_tiktok = generar_metadata_tiktok(data)
+        log_telegram(f"✅ Metadata TikTok generada\n📝 Título TikTok: `{metadata_tiktok['titulo_tiktok']}`")
 
     log_telegram("📤 Subiendo video a YouTube...")
     video_id_youtube, yt_service = subir_a_youtube(video_path, metadata)
@@ -566,9 +726,9 @@ def main():
     log_telegram("✅ Comentario publicado en YouTube")
 
     if destino == "youtube_tiktok":
-        log_telegram("📤 Subiendo video a TikTok...")
-        subir_a_tiktok(video_path, metadata)
-        log_telegram("✅ Video subido a TikTok")
+        log_telegram("📤 Subiendo y publicando video en TikTok...")
+        publish_id = subir_a_tiktok(video_path, metadata_tiktok, tiktok_token)
+        log_telegram(f"✅ Video publicado en TikTok\n🆔 publish\\_id: `{publish_id}`")
 
     log_telegram("📨 Enviando resumen final a Telegram...")
     mandar_a_telegram(video_path, data, metadata, video_id=video_id_youtube)
