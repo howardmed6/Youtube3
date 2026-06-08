@@ -493,62 +493,60 @@ def subir_a_youtube(video_path: str, metadata: dict):
     return response["id"], youtube
 
 
-import requests
-import os
-
-def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
+def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
     video_size = os.path.getsize(video_path)
-    titulo = metadata_tiktok.get("titulo_tiktok", "Video subido automáticamente")[:150]
 
-    headers_json = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json; charset=UTF-8"
+    # Estructura exacta de tu versión que funcionaba
+    payload = {
+        "source_info": {
+            "source": "FILE_UPLOAD",
+            "video_size": video_size,
+            "chunk_size": video_size,
+            "total_chunk_count": 1
+        }
     }
 
-    # ── Paso 1: Init para DRAFT (Borrador) ──
-    print("TikTok: Iniciando creación de borrador...")
+    # Endpoint de INBOX (Borrador/Bandeja)
+    url_init = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
     
-    # IMPORTANTE: Se usa el endpoint de DRAFT
-    url_init = "https://open.tiktokapis.com/v2/post/publish/draft/init/"
-    
-    init_resp = requests.post(
+    init_req = requests.post(
         url_init,
-        headers=headers_json,
-        json={
-            "post_info": {
-                "title": titulo,
-                "disable_duet": False,
-                "disable_comment": False,
-                "disable_stitch": False
-            },
-            "source_info": {
-                "source": "FILE_UPLOAD",
-                "video_size": video_size,
-                "chunk_size": video_size,
-                "total_chunk_count": 1
-            }
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
         }
     )
     
-    init_data = init_resp.json()
-    
-    # Manejo de error específico
-    if init_resp.status_code != 200:
-        # Aquí es donde te saldrá el error de scope si no tienes el permiso
-        raise Exception(f"Fallo en init (DRAFT): {init_data}")
+    # Verificamos si la respuesta es JSON antes de intentar acceder a 'data'
+    try:
+        init_resp = init_req.json()
+    except Exception as e:
+        print(f"Error de respuesta (No es JSON): {init_req.text}")
+        raise e
 
-    upload_url = init_data["data"]["upload_url"]
-    publish_id = init_data["data"]["publish_id"]
+    if "data" not in init_resp:
+        raise Exception(f"Error en init: {init_resp}")
 
-    # ── Paso 2: Subida ──
-    # Esta parte se mantiene igual, el archivo se sube a la URL temporal proporcionada
+    upload_url = init_resp["data"]["upload_url"]
+    publish_id = init_resp["data"]["publish_id"]
+    print(f"✅ TikTok upload iniciado (ID: {publish_id})")
+
+    # Subida del binario
     with open(video_path, "rb") as f:
-        upload_resp = requests.put(upload_url, data=f, headers={"Content-Type": "video/mp4"})
+        upload_resp = requests.put(
+            upload_url,
+            data=f,
+            headers={
+                "Content-Type": "video/mp4",
+                "Content-Range": f"bytes 0-{video_size-1}/{video_size}"
+            }
+        )
     
     if upload_resp.status_code != 200:
-        raise Exception(f"Fallo al subir el archivo binario: {upload_resp.text}")
-    
-    print(f"✅ Video subido como BORRADOR. ID: {publish_id}")
+        raise Exception(f"Error subiendo el video: {upload_resp.text}")
+
+    print(f"✅ TikTok video subido con éxito: {publish_id}")
     return publish_id
  
 def log_telegram(mensaje: str):
