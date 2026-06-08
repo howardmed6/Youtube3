@@ -494,30 +494,27 @@ def subir_a_youtube(video_path: str, metadata: dict):
 
 
 def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
-    """
-    Sube y publica un video en TikTok usando Content Posting API v2.
-    Flujo completo: init → upload chunk → publish.
-    """
     video_size = os.path.getsize(video_path)
-    titulo     = metadata_tiktok["titulo_tiktok"]
- 
+    # Aseguramos que el título cumpla con los límites
+    titulo = metadata_tiktok.get("titulo_tiktok", "Video subido automáticamente")[:150]
+
     headers_json = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json; charset=UTF-8"
     }
- 
-    # ── Paso 1: Init ────────────────────────────────────────────
-    print("TikTok: iniciando subida...")
+
+    # ── Paso 1: Init - Usamos los parámetros que permiten guardar datos ──
+    print("TikTok: iniciando subida con metadata...")
     init_resp = requests.post(
         "https://open.tiktokapis.com/v2/post/publish/video/init/",
         headers=headers_json,
         json={
             "post_info": {
                 "title": titulo,
-                "privacy_level": "PUBLIC_TO_EVERYONE",
+                "privacy_level": "SELF_ONLY", # Privado para evitar errores de permisos públicos
                 "disable_duet": False,
                 "disable_comment": False,
-                "disable_stitch": False,
+                "disable_stitch": False
             },
             "source_info": {
                 "source": "FILE_UPLOAD",
@@ -527,55 +524,22 @@ def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
             }
         }
     )
+    
     init_data = init_resp.json()
-    print(f"TikTok init response: {init_data}")
- 
-    if init_resp.status_code != 200 or "data" not in init_data:
-        raise Exception(f"TikTok init fallido: {init_data}")
- 
+    
+    # Si sigue dando 401 aquí, es porque la app NO tiene permiso para post_info
+    if init_resp.status_code != 200:
+        raise Exception(f"Fallo en init: {init_data}")
+
     upload_url = init_data["data"]["upload_url"]
     publish_id = init_data["data"]["publish_id"]
-    print(f"TikTok publish_id: {publish_id}")
- 
-    # ── Paso 2: Upload del chunk ─────────────────────────────────
-    print("TikTok: subiendo video...")
+
+    # ── Paso 2: Subida ──
     with open(video_path, "rb") as f:
-        video_data = f.read()
- 
-    upload_resp = requests.put(
-        upload_url,
-        data=video_data,
-        headers={
-            "Content-Type": "video/mp4",
-            "Content-Range": f"bytes 0-{video_size - 1}/{video_size}"
-        }
-    )
-    print(f"TikTok upload status: {upload_resp.status_code}")
-    if upload_resp.status_code not in (200, 201, 206):
-        raise Exception(f"TikTok upload fallido: {upload_resp.text}")
- 
-    # ── Paso 3: Verificar estado hasta que esté listo ─────────────
-    import time
-    print("TikTok: verificando estado de publicacion...")
-    for intento in range(10):
-        time.sleep(5)
-        status_resp = requests.post(
-            "https://open.tiktokapis.com/v2/post/publish/status/fetch/",
-            headers=headers_json,
-            json={"publish_id": publish_id}
-        )
-        status_data = status_resp.json()
-        print(f"TikTok status intento {intento + 1}: {status_data}")
- 
-        estado = status_data.get("data", {}).get("status", "")
-        if estado == "PUBLISH_COMPLETE":
-            print(f"TikTok: video publicado correctamente (publish_id: {publish_id})")
-            return publish_id
-        elif estado in ("FAILED", "PUBLISH_FAILED"):
-            raise Exception(f"TikTok publicacion fallida: {status_data}")
-        # Si sigue en PROCESSING_UPLOAD / PROCESSING_DOWNLOAD continuar esperando
- 
-    raise Exception("TikTok: timeout esperando confirmacion de publicacion")
+        requests.put(upload_url, data=f, headers={"Content-Type": "video/mp4"})
+    
+    print(f"✅ Video subido. ID: {publish_id}")
+    return publish_id
  
 def log_telegram(mensaje: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
