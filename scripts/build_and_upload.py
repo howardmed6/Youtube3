@@ -518,6 +518,7 @@ def subir_a_tiktok(video_path: str, metadata_tiktok: dict, access_token: str):
                 "disable_duet": False,
                 "disable_comment": False,
                 "disable_stitch": False,
+                "post_mode": "DIRECT_POST" # <--- AGREGA ESTA LÍNEA AQUÍ
             },
             "source_info": {
                 "source": "FILE_UPLOAD",
