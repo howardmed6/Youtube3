@@ -493,10 +493,8 @@ def subir_a_youtube(video_path: str, metadata: dict):
     return response["id"], youtube
 
 
-def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
+ddef subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
     video_size = os.path.getsize(video_path)
-
-    # Estructura exacta de tu versión que funcionaba
     payload = {
         "source_info": {
             "source": "FILE_UPLOAD",
@@ -506,7 +504,6 @@ def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
         }
     }
 
-    # Endpoint de INBOX (Borrador/Bandeja)
     url_init = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
     
     init_req = requests.post(
@@ -518,19 +515,9 @@ def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
         }
     )
     
-    # Verificamos si la respuesta es JSON antes de intentar acceder a 'data'
-    try:
-        init_resp = init_req.json()
-    except Exception as e:
-        print(f"Error de respuesta (No es JSON): {init_req.text}")
-        raise e
-
-    if "data" not in init_resp:
-        raise Exception(f"Error en init: {init_resp}")
-
+    # Obtenemos la URL de subida
+    init_resp = init_req.json()
     upload_url = init_resp["data"]["upload_url"]
-    publish_id = init_resp["data"]["publish_id"]
-    print(f"✅ TikTok upload iniciado (ID: {publish_id})")
 
     # Subida del binario
     with open(video_path, "rb") as f:
@@ -546,8 +533,9 @@ def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
     if upload_resp.status_code != 200:
         raise Exception(f"Error subiendo el video: {upload_resp.text}")
 
-    print(f"✅ TikTok video subido con éxito: {publish_id}")
-    return publish_id
+    # Ya no retornamos el ID, solo confirmamos que la subida fue exitosa
+    print("✅ Video subido exitosamente a borradores")
+    return True
  
 def log_telegram(mensaje: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -733,10 +721,15 @@ def main():
     log_telegram("✅ Comentario publicado en YouTube")
 
     if destino == "youtube_tiktok":
-        log_telegram("📤 Subiendo y publicando video en TikTok...")
-        publish_id = subir_a_tiktok(video_path, metadata_tiktok, tiktok_token)
-        log_telegram(f"✅ Video publicado en TikTok\n🆔 publish\\_id: `{publish_id}`")
-
+        log_telegram("📤 Subiendo video a TikTok (Borradores)...")
+        try:
+            subir_a_tiktok(video_path, metadata_tiktok, tiktok_token)
+            log_telegram("✅ Video guardado correctamente en borradores de TikTok")
+        except Exception as e:
+            log_telegram(f"❌ Error al subir a TikTok: {str(e)}")
+            # Esto evita que el script falle (exit code 1) si TikTok tiene problemas
+            
+            
     log_telegram("📨 Enviando resumen final a Telegram...")
     mandar_a_telegram(video_path, data, metadata, video_id=video_id_youtube)
 
