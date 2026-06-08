@@ -493,7 +493,7 @@ def subir_a_youtube(video_path: str, metadata: dict):
     return response["id"], youtube
 
 
-ddef subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
+def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
     video_size = os.path.getsize(video_path)
     payload = {
         "source_info": {
