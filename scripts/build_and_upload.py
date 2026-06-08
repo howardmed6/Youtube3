@@ -660,6 +660,22 @@ def pedir_token_tiktok() -> str:
                 })
                 return token
 
+def obtener_access_token_tiktok():
+    response = requests.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        data={
+            "client_key": os.environ["TIKTOK_CLIENT_KEY"],
+            "client_secret": os.environ["TIKTOK_CLIENT_SECRET"],
+            "grant_type": "refresh_token",
+            "refresh_token": os.environ["TIKTOK_REFRESH_TOKEN"]
+        }
+    )
+    data = response.json()
+    if "access_token" not in data:
+        raise Exception(f"Error obteniendo token: {data}")
+    return data["access_token"]
+
+
 
 def main():
     with open("movie_data.json", "r", encoding="utf-8") as f:
@@ -678,7 +694,7 @@ def main():
     # ── Si es TikTok, pedir token inmediatamente ─────────────────
     tiktok_token = None
     if destino == "youtube_tiktok":
-        tiktok_token = pedir_token_tiktok()
+        tiktok_token = obtener_access_token_tiktok()
         log_telegram("🔑 Token de TikTok recibido correctamente")
 
     if modo == 1:
