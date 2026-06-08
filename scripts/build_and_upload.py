@@ -691,7 +691,7 @@ def obtener_access_token_tiktok():
         raise Exception("Error obteniendo token")
     
     nuevo_token = data["access_token"]
-    log_telegram("✅ *Nuevo token generado y verificado:*", token=nuevo_token)
+    log_telegram(f"✅ *Nuevo token generado y verificado:*\n`{nuevo_token}`")
     
     return nuevo_token
 
