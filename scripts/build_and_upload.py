@@ -351,7 +351,6 @@ def generar_metadata_tiktok(data: dict) -> dict:
     plataformas_pago = data["plataformas"]["pago"]
     año_actual       = datetime.now().year
 
-    # Detectar plataformas conocidas para hashtags específicos
     hashtags_plataforma = []
     plataformas_lower = [p.lower() for p in plataformas_pago]
     if any("netflix" in p for p in plataformas_lower):
@@ -400,7 +399,6 @@ Responde SOLO en este formato JSON exacto sin ningun texto adicional:
     texto = texto.replace("```json", "").replace("```", "").strip()
     result = json.loads(texto)
 
-    # Asegurar que no excede 150 chars (límite de TikTok)
     if len(result["titulo_tiktok"]) > 150:
         result["titulo_tiktok"] = result["titulo_tiktok"][:147] + "..."
 
@@ -505,7 +503,7 @@ def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
     }
 
     url_init = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
-    
+
     init_req = requests.post(
         url_init,
         json=payload,
@@ -514,12 +512,10 @@ def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
             "Content-Type": "application/json"
         }
     )
-    
-    # Obtenemos la URL de subida
+
     init_resp = init_req.json()
     upload_url = init_resp["data"]["upload_url"]
 
-    # Subida del binario
     with open(video_path, "rb") as f:
         upload_resp = requests.put(
             upload_url,
@@ -529,14 +525,14 @@ def subir_a_tiktok(video_path: str, metadata: dict, access_token: str):
                 "Content-Range": f"bytes 0-{video_size-1}/{video_size}"
             }
         )
-    
+
     if upload_resp.status_code != 200:
         raise Exception(f"Error subiendo el video: {upload_resp.text}")
 
-    # Ya no retornamos el ID, solo confirmamos que la subida fue exitosa
     print("✅ Video subido exitosamente a borradores")
     return True
- 
+
+
 def log_telegram(mensaje: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     requests.post(url, json={
@@ -548,17 +544,53 @@ def log_telegram(mensaje: str):
 
 
 def preguntar_plataformas() -> str:
-    """Envía mensaje con botones y espera selección del usuario."""
+    """
+    Muestra 8 opciones de destino de publicación.
+
+    callback_data:
+      corto_yt           → versión corta  → solo YouTube
+      largo_yt           → versión larga  → solo YouTube
+      corto_tt           → versión corta  → solo TikTok
+      largo_tt           → versión larga  → solo TikTok
+      corto_yt_tt        → versión corta  → YouTube + TikTok
+      largo_yt_tt        → versión larga  → YouTube + TikTok
+      corto_yt_largo_tt  → versión corta  → YouTube  |  versión larga → TikTok
+      largo_yt_corto_tt  → versión larga  → YouTube  |  versión corta → TikTok
+    """
     url_send = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     requests.post(url_send, json={
         "chat_id": TELEGRAM_CHAT_ID,
-        "text": "📤 *¿Dónde quieres publicar el video?*",
+        "text": (
+            "📤 *¿Dónde quieres publicar el video?*\n\n"
+            "🟦 *Solo YouTube*\n"
+            "  ▸ Corta | ▸ Larga\n\n"
+            "🟥 *Solo TikTok*\n"
+            "  ▸ Corta | ▸ Larga\n\n"
+            "🟩 *YouTube + TikTok (misma versión)*\n"
+            "  ▸ Corta | ▸ Larga\n\n"
+            "🟨 *YouTube + TikTok (versiones distintas)*\n"
+            "  ▸ Corta→YT / Larga→TT | ▸ Larga→YT / Corta→TT"
+        ),
         "parse_mode": "Markdown",
         "reply_markup": {
-            "inline_keyboard": [[
-                {"text": "▶️ Solo YouTube", "callback_data": "solo_youtube"},
-                {"text": "▶️ YouTube + TikTok", "callback_data": "youtube_tiktok"}
-            ]]
+            "inline_keyboard": [
+                [
+                    {"text": "▶️ Corta → YT",           "callback_data": "corto_yt"},
+                    {"text": "▶️ Larga → YT",            "callback_data": "largo_yt"}
+                ],
+                [
+                    {"text": "▶️ Corta → TikTok",        "callback_data": "corto_tt"},
+                    {"text": "▶️ Larga → TikTok",         "callback_data": "largo_tt"}
+                ],
+                [
+                    {"text": "▶️ Corta → YT + TT",       "callback_data": "corto_yt_tt"},
+                    {"text": "▶️ Larga → YT + TT",        "callback_data": "largo_yt_tt"}
+                ],
+                [
+                    {"text": "▶️ Corta→YT / Larga→TT",   "callback_data": "corto_yt_largo_tt"},
+                    {"text": "▶️ Larga→YT / Corta→TT",   "callback_data": "largo_yt_corto_tt"}
+                ]
+            ]
         }
     })
 
@@ -583,10 +615,6 @@ def preguntar_plataformas() -> str:
 
 
 def pedir_token_tiktok() -> str:
-    """
-    Pide al usuario que envíe el access token de TikTok por Telegram.
-    Se usa porque el token vence cada 24h y no se puede guardar en env.
-    """
     url_send = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     requests.post(url_send, json={
         "chat_id": TELEGRAM_CHAT_ID,
@@ -611,7 +639,6 @@ def pedir_token_tiktok() -> str:
             offset = update["update_id"] + 1
             if "message" in update and "text" in update["message"]:
                 token = update["message"]["text"].strip()
-                # Confirmación
                 requests.post(url_send, json={
                     "chat_id": TELEGRAM_CHAT_ID,
                     "text": "✅ Token recibido, continuando con TikTok...",
@@ -619,22 +646,20 @@ def pedir_token_tiktok() -> str:
                 })
                 return token
 
+
 def obtener_access_token_tiktok():
     access_token = os.environ.get("TIKTOK_ACCESS_TOKEN")
-    
-    # 1. Validación
+
     if access_token:
         url_info = "https://open.tiktokapis.com/v2/user/info/"
         headers = {"Authorization": f"Bearer {access_token}"}
         params = {"fields": "display_name"}
         resp = requests.get(url_info, headers=headers, params=params)
-        
         if resp.status_code == 200:
             return access_token
 
-    # 2. Refresco
     log_telegram("🔄 *TikTok*: Token expirado o inexistente. Refrescando...")
-    
+
     response = requests.post(
         "https://open.tiktokapis.com/v2/oauth/token/",
         data={
@@ -644,16 +669,40 @@ def obtener_access_token_tiktok():
             "refresh_token": os.environ["TIKTOK_REFRESH_TOKEN"]
         }
     )
-    
+
     data = response.json()
     if "access_token" not in data:
         log_telegram(f"❌ *TikTok ERROR*: {data}")
         raise Exception("Error obteniendo token")
-    
+
     nuevo_token = data["access_token"]
     log_telegram(f"✅ *Nuevo token generado y verificado:*\n`{nuevo_token}`")
-    
     return nuevo_token
+
+
+# ─── Helpers de routing ──────────────────────────────────────────
+
+def _necesita_tiktok(destino: str) -> bool:
+    return destino in {
+        "corto_tt", "largo_tt",
+        "corto_yt_tt", "largo_yt_tt",
+        "corto_yt_largo_tt", "largo_yt_corto_tt"
+    }
+
+def _necesita_youtube(destino: str) -> bool:
+    return destino in {
+        "corto_yt", "largo_yt",
+        "corto_yt_tt", "largo_yt_tt",
+        "corto_yt_largo_tt", "largo_yt_corto_tt"
+    }
+
+def _version_para_youtube(destino: str) -> str:
+    """Devuelve 'corta' o 'larga'."""
+    return "larga" if destino in {"largo_yt", "largo_yt_tt", "largo_yt_corto_tt"} else "corta"
+
+def _version_para_tiktok(destino: str) -> str:
+    """Devuelve 'corta' o 'larga'."""
+    return "larga" if destino in {"largo_tt", "largo_yt_tt", "corto_yt_largo_tt"} else "corta"
 
 
 def main():
@@ -668,14 +717,26 @@ def main():
 
     # ── Pregunta de plataformas ──────────────────────────────────
     destino = preguntar_plataformas()
-    log_telegram(f"📌 Destino seleccionado: *{'Solo YouTube' if destino == 'solo_youtube' else 'YouTube + TikTok'}*")
 
-    # ── Si es TikTok, pedir token inmediatamente ─────────────────
+    etiquetas = {
+        "corto_yt":           "Corta → YouTube",
+        "largo_yt":           "Larga → YouTube",
+        "corto_tt":           "Corta → TikTok",
+        "largo_tt":           "Larga → TikTok",
+        "corto_yt_tt":        "Corta → YouTube + TikTok",
+        "largo_yt_tt":        "Larga → YouTube + TikTok",
+        "corto_yt_largo_tt":  "Corta→YT / Larga→TikTok",
+        "largo_yt_corto_tt":  "Larga→YT / Corta→TikTok",
+    }
+    log_telegram(f"📌 Destino seleccionado: *{etiquetas.get(destino, destino)}*")
+
+    # ── Token TikTok (antes de cualquier proceso largo) ──────────
     tiktok_token = None
-    if destino == "youtube_tiktok":
+    if _necesita_tiktok(destino):
         tiktok_token = obtener_access_token_tiktok()
-        log_telegram("🔑 Token de TikTok recibido correctamente")
+        log_telegram("🔑 Token de TikTok listo")
 
+    # ── Descarga / obtención del media ──────────────────────────
     if modo == 1:
         log_telegram("📥 Descargando archivo desde Google Drive...")
         ruta_media, ext = descargar_desde_drive()
@@ -692,46 +753,65 @@ def main():
         es_video = False
         log_telegram("✅ Imagen obtenida desde Gemini")
 
+    # ── Construcción del video corto ─────────────────────────────
     log_telegram("🎬 Construyendo video con FFmpeg...")
-    video_path = construir_video(data, ruta_media, es_video)
+    video_corto = construir_video(data, ruta_media, es_video)
     log_telegram("✅ Video construido correctamente")
 
     if not es_video:
         log_telegram("🎵 Agregando música de fondo...")
-        video_path = agregar_audio(video_path, generos)
+        video_corto = agregar_audio(video_corto, generos)
         log_telegram("✅ Audio agregado")
 
-    log_telegram("🤖 Generando metadata con Claude...")
-    metadata = generar_metadata(data)
-    log_telegram(f"✅ Metadata YouTube generada\n📝 Título YT: *{metadata['titulo_yt']}*")
+    # ── Ruta de la versión larga (_TikTok) ───────────────────────
+    # El bot de edición genera este archivo con el sufijo _TikTok.
+    # Si no existe se cae al video corto como fallback.
+    video_largo = "/tmp/output_video_TikTok.mp4"
+    if not os.path.exists(video_largo):
+        log_telegram("⚠️ Versión larga (_TikTok) no encontrada, usando versión corta como fallback")
+        video_largo = video_corto
 
-    # ── Metadata TikTok si aplica ────────────────────────────────
+    # ── Metadata ─────────────────────────────────────────────────
+    log_telegram("🤖 Generando metadata con Claude...")
+    metadata_yt = generar_metadata(data)
+    log_telegram(f"✅ Metadata YouTube generada\n📝 Título YT: *{metadata_yt['titulo_yt']}*")
+
     metadata_tiktok = None
-    if destino == "youtube_tiktok":
+    if _necesita_tiktok(destino):
         log_telegram("🤖 Generando metadata optimizada para TikTok...")
         metadata_tiktok = generar_metadata_tiktok(data)
         log_telegram(f"✅ Metadata TikTok generada\n📝 Título TikTok: `{metadata_tiktok['titulo_tiktok']}`")
 
-    log_telegram("📤 Subiendo video a YouTube...")
-    video_id_youtube, yt_service = subir_a_youtube(video_path, metadata)
-    log_telegram(f"✅ Video publicado en YouTube\n🔗 https://youtube.com/watch?v={video_id_youtube}")
+    # ── Publicación en YouTube ───────────────────────────────────
+    video_id_youtube = None
+    yt_service       = None
 
-    log_telegram("💬 Publicando comentario informativo en YouTube...")
-    publicar_comentario_youtube(yt_service, video_id_youtube, data)
-    log_telegram("✅ Comentario publicado en YouTube")
+    if _necesita_youtube(destino):
+        version_yt = _version_para_youtube(destino)
+        path_yt    = video_largo if version_yt == "larga" else video_corto
+        log_telegram(f"📤 Subiendo versión *{version_yt}* a YouTube...")
+        video_id_youtube, yt_service = subir_a_youtube(path_yt, metadata_yt)
+        log_telegram(f"✅ Publicado en YouTube\n🔗 https://youtube.com/watch?v={video_id_youtube}")
 
-    if destino == "youtube_tiktok":
-        log_telegram("📤 Subiendo video a TikTok (Borradores)...")
+        log_telegram("💬 Publicando comentario informativo en YouTube...")
+        publicar_comentario_youtube(yt_service, video_id_youtube, data)
+        log_telegram("✅ Comentario publicado en YouTube")
+
+    # ── Publicación en TikTok ────────────────────────────────────
+    if _necesita_tiktok(destino):
+        version_tt = _version_para_tiktok(destino)
+        path_tt    = video_largo if version_tt == "larga" else video_corto
+        log_telegram(f"📤 Subiendo versión *{version_tt}* a TikTok (Borradores)...")
         try:
-            subir_a_tiktok(video_path, metadata_tiktok, tiktok_token)
-            log_telegram("✅ Video guardado correctamente en borradores de TikTok")
+            subir_a_tiktok(path_tt, metadata_tiktok, tiktok_token)
+            log_telegram("✅ Video guardado en borradores de TikTok")
         except Exception as e:
             log_telegram(f"❌ Error al subir a TikTok: {str(e)}")
-            # Esto evita que el script falle (exit code 1) si TikTok tiene problemas
-            
-            
-    log_telegram("📨 Enviando resumen final a Telegram...")
-    mandar_a_telegram(video_path, data, metadata, video_id=video_id_youtube)
+
+    # ── Resumen final a Telegram ─────────────────────────────────
+    if video_id_youtube:
+        log_telegram("📨 Enviando resumen final a Telegram...")
+        mandar_a_telegram(video_corto, data, metadata_yt, video_id=video_id_youtube)
 
     log_telegram("🏁 *Proceso completado exitosamente* ✅")
 
