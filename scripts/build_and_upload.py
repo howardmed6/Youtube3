@@ -104,7 +104,12 @@ def obtener_resolucion(ruta: str) -> tuple:
     return ancho, alto
 
 
-def descargar_desde_drive():
+def descargar_desde_drive(version: str = "corta"):
+    """
+    Descarga de Drive el archivo correspondiente a la versión solicitada.
+    version='corta' → busca el archivo cuyo nombre empieza con 'SHORT_'
+    version='larga' → busca el archivo cuyo nombre contiene '_TikTok'
+    """
     resultados = drive_service.files().list(
         q=f"'{DRIVE_FOLDER_ID}' in parents and trashed=false",
         fields="files(id, name, mimeType)"
@@ -112,13 +117,24 @@ def descargar_desde_drive():
     archivos = resultados.get("files", [])
     if not archivos:
         raise Exception("No hay archivos en la carpeta de Drive")
-    archivo    = archivos[0]
+
+    archivo = None
+    if version == "corta":
+        archivo = next((a for a in archivos if a["name"].startswith("SHORT_")), None)
+    else:
+        archivo = next((a for a in archivos if "_TikTok" in a["name"]), None)
+
+    if not archivo:
+        raise Exception(f"No se encontró la versión '{version}' en Drive "
+                        f"(corta=SHORT_*, larga=*_TikTok*). Archivos disponibles: "
+                        f"{[a['name'] for a in archivos]}")
+
     file_id    = archivo["id"]
     nombre     = archivo["name"]
     ext        = Path(nombre).suffix.lower()
+    ruta_local = f"/tmp/media_{version}{ext}"
     print(f"Descargando {nombre} de Drive...")
-    request    = drive_service.files().get_media(fileId=file_id)
-    ruta_local = f"/tmp/media{ext}"
+    request = drive_service.files().get_media(fileId=file_id)
     with open(ruta_local, "wb") as f:
         downloader = MediaIoBaseDownload(f, request)
         done = False
@@ -737,39 +753,61 @@ def main():
         log_telegram("🔑 Token de TikTok listo")
 
     # ── Descarga / obtención del media ──────────────────────────
-    if modo == 1:
-        log_telegram("📥 Descargando archivo desde Google Drive...")
-        ruta_media, ext = descargar_desde_drive()
-        es_video = ext in [".mp4", ".mov", ".avi", ".mkv"]
-        log_telegram(f"✅ Archivo descargado: `{ext}` — {'Video' if es_video else 'Imagen'}")
-    elif modo == 2:
-        log_telegram("📥 Descargando video desde Google Drive...")
-        ruta_media, ext = descargar_desde_drive()
-        es_video = True
-        log_telegram(f"✅ Video descargado: `{ext}`")
+    necesita_corta = _version_para_youtube(destino) == "corta" or _version_para_tiktok(destino) == "corta"
+    necesita_larga = _version_para_youtube(destino) == "larga" or _version_para_tiktok(destino) == "larga"
+    # Para destinos solo-TikTok o solo-YouTube sin la otra versión, igual
+    # calculamos qué versiones hacen falta según el destino elegido.
+    if not _necesita_youtube(destino):
+        necesita_corta = _version_para_tiktok(destino) == "corta"
+        necesita_larga = _version_para_tiktok(destino) == "larga"
+    if not _necesita_tiktok(destino):
+        necesita_corta = _version_para_youtube(destino) == "corta"
+        necesita_larga = _version_para_youtube(destino) == "larga"
+
+    video_corto = None
+    video_largo = None
+
+    if modo in [1, 2]:
+        if necesita_corta:
+            log_telegram("📥 Descargando versión corta (SHORT_) desde Google Drive...")
+            ruta_corta, ext = descargar_desde_drive("corta")
+            es_video = ext in [".mp4", ".mov", ".avi", ".mkv"]
+            log_telegram(f"✅ Versión corta descargada: `{ext}`")
+            log_telegram("🎬 Construyendo video corto con FFmpeg...")
+            video_corto = construir_video(data, ruta_corta, es_video)
+            log_telegram("✅ Video corto construido correctamente")
+            if not es_video:
+                log_telegram("🎵 Agregando música de fondo...")
+                video_corto = agregar_audio(video_corto, generos)
+                log_telegram("✅ Audio agregado")
+
+        if necesita_larga:
+            log_telegram("📥 Descargando versión larga (_TikTok) desde Google Drive...")
+            ruta_larga, ext = descargar_desde_drive("larga")
+            es_video = ext in [".mp4", ".mov", ".avi", ".mkv"]
+            log_telegram(f"✅ Versión larga descargada: `{ext}`")
+            log_telegram("🎬 Construyendo video largo con FFmpeg...")
+            video_largo = construir_video(data, ruta_larga, es_video)
+            log_telegram("✅ Video largo construido correctamente")
+            if not es_video:
+                log_telegram("🎵 Agregando música de fondo...")
+                video_largo = agregar_audio(video_largo, generos)
+                log_telegram("✅ Audio agregado")
+
     elif modo == 3:
         log_telegram(f"🔍 Buscando imagen con Gemini para *{data['titulo']}*...")
         ruta_media = buscar_imagen_gemini(data["titulo"])
         es_video = False
         log_telegram("✅ Imagen obtenida desde Gemini")
-
-    # ── Construcción del video corto ─────────────────────────────
-    log_telegram("🎬 Construyendo video con FFmpeg...")
-    video_corto = construir_video(data, ruta_media, es_video)
-    log_telegram("✅ Video construido correctamente")
-
-    if not es_video:
+        log_telegram("🎬 Construyendo video con FFmpeg...")
+        video_base = construir_video(data, ruta_media, es_video)
+        log_telegram("✅ Video construido correctamente")
         log_telegram("🎵 Agregando música de fondo...")
-        video_corto = agregar_audio(video_corto, generos)
+        video_base = agregar_audio(video_base, generos)
         log_telegram("✅ Audio agregado")
-
-    # ── Ruta de la versión larga (_TikTok) ───────────────────────
-    # El bot de edición genera este archivo con el sufijo _TikTok.
-    # Si no existe se cae al video corto como fallback.
-    video_largo = "/tmp/output_video_TikTok.mp4"
-    if not os.path.exists(video_largo):
-        log_telegram("⚠️ Versión larga (_TikTok) no encontrada, usando versión corta como fallback")
-        video_largo = video_corto
+        # En modo 3 (imagen) no hay versión larga, se usa el mismo para ambos
+        video_corto = video_base
+        video_largo = video_base
 
     # ── Metadata ─────────────────────────────────────────────────
     log_telegram("🤖 Generando metadata con Claude...")
