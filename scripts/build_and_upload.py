@@ -155,7 +155,7 @@ def buscar_imagen_gemini(titulo: str) -> str:
     return ruta
 
 
-def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
+def construir_video(data: dict, ruta_media: str, es_video: bool, salida: str = "/tmp/output_video.mp4") -> str:
     sinopsis   = limpiar_texto(data["sinopsis"])
     generos    = limpiar_texto(", ".join(data["generos"][:3]))
     año        = data["año"]
@@ -210,7 +210,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool) -> str:
         with open(poster_path, "wb") as f:
             f.write(r.content)
 
-    salida   = "/tmp/output_video.mp4"
     duracion = random.randint(30, 60) if not es_video else None
 
     espacio_sinopsis = h_sec1 - 70
@@ -774,7 +773,7 @@ def main():
             es_video = ext in [".mp4", ".mov", ".avi", ".mkv"]
             log_telegram(f"✅ Versión corta descargada: `{ext}`")
             log_telegram("🎬 Construyendo video corto con FFmpeg...")
-            video_corto = construir_video(data, ruta_corta, es_video)
+            video_corto = construir_video(data, ruta_corta, es_video, "/tmp/output_corto.mp4")
             log_telegram("✅ Video corto construido correctamente")
             if not es_video:
                 log_telegram("🎵 Agregando música de fondo...")
@@ -787,7 +786,7 @@ def main():
             es_video = ext in [".mp4", ".mov", ".avi", ".mkv"]
             log_telegram(f"✅ Versión larga descargada: `{ext}`")
             log_telegram("🎬 Construyendo video largo con FFmpeg...")
-            video_largo = construir_video(data, ruta_larga, es_video)
+            video_largo = construir_video(data, ruta_larga, es_video, "/tmp/output_largo.mp4")
             log_telegram("✅ Video largo construido correctamente")
             if not es_video:
                 log_telegram("🎵 Agregando música de fondo...")
@@ -800,7 +799,7 @@ def main():
         es_video = False
         log_telegram("✅ Imagen obtenida desde Gemini")
         log_telegram("🎬 Construyendo video con FFmpeg...")
-        video_base = construir_video(data, ruta_media, es_video)
+        video_base = construir_video(data, ruta_media, es_video, "/tmp/output_corto.mp4")
         log_telegram("✅ Video construido correctamente")
         log_telegram("🎵 Agregando música de fondo...")
         video_base = agregar_audio(video_base, generos)
