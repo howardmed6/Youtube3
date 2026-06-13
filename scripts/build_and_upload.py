@@ -856,7 +856,10 @@ def main():
     if video_id_youtube:
         log_telegram("📨 Enviando resumen final a Telegram...")
         mandar_a_telegram(video_corto, data, metadata_yt, video_id=video_id_youtube)
-
+    else:
+        log_telegram("📨 Enviando resumen final a Telegram...")
+        mandar_a_telegram(video_corto, data, metadata_yt)
+        
     log_telegram("🏁 *Proceso completado exitosamente* ✅")
 
 
