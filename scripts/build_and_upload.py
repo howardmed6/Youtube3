@@ -257,7 +257,6 @@ def construir_video(data: dict, ruta_media: str, es_video: bool, salida: str = "
         f"[d3]drawtext=text='{tipo}  {año}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_tipo}[d4];"
         f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0,format=yuv420p[out]"
     )
-
     if es_video:
         cmd = [
             "ffmpeg", "-y",
@@ -269,6 +268,10 @@ def construir_video(data: dict, ruta_media: str, es_video: bool, salida: str = "
             "-c:v", "libx264",
             "-c:a", "aac",
             "-shortest",
+            "-color_range", "tv",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
             salida
         ]
     else:
@@ -280,6 +283,10 @@ def construir_video(data: dict, ruta_media: str, es_video: bool, salida: str = "
             "-map", "[out]",
             "-c:v", "libx264",
             "-t", str(duracion),
+            "-color_range", "tv",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
             salida
         ]
 
