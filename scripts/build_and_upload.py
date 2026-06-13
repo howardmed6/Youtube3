@@ -255,7 +255,7 @@ def construir_video(data: dict, ruta_media: str, es_video: bool, salida: str = "
         f"[d2]drawtext=text='{lineas_pais[0]}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais}[d2b];"
         f"[d2b]drawtext=text='{lineas_pais[-1]}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_pais + font_dat + 5}[d3];"
         f"[d3]drawtext=text='{tipo}  {año}':fontsize={font_dat}:fontcolor=white:x={x_datos}:y={y_tipo}[d4];"
-        f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0[out]"
+        f"[d4]drawtext=text='':fontsize=1:fontcolor=black:x=0:y=0,format=yuv420p[out]"
     )
 
     if es_video:
