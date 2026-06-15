@@ -9,9 +9,7 @@ TMDB_API_KEY   = os.environ["TMDB_API_KEY"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
 MEDIA_TYPE     = os.environ.get("MEDIA_TYPE", "movie")   # movie | tv
 MODO           = os.environ.get("MODO", "resena")
-
-# MOVIE_ID ahora es opcional: puede ser un ID, un enlace de TMDB o un nombre
-MOVIE_INPUT    = os.environ.get("MOVIE_ID", "")          # renombramos internamente
+MOVIE_INPUT    = os.environ.get("MOVIE_ID", "")
 
 print(f"Iniciando fetch_data.py...")
 print(f"MOVIE_INPUT : {MOVIE_INPUT}")
@@ -21,13 +19,14 @@ print(f"MODO        : {MODO}")
 # ─── Cliente Claude ──────────────────────────────────────────────
 claude = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
+
 # ════════════════════════════════════════════════════════════════
 #  RESOLUCIÓN DEL INPUT → MOVIE_ID numérico
 # ════════════════════════════════════════════════════════════════
 
 def extraer_id_de_url(url: str) -> tuple[str | None, str | None]:
     """
-    Soporta formatos:
+    Soporta:
       https://www.themoviedb.org/movie/660120-verdens-verste-menneske
       https://www.themoviedb.org/tv/1396-breaking-bad
     Devuelve (movie_id, media_type) o (None, None)
@@ -64,20 +63,19 @@ def buscar_por_nombre(nombre: str, media_type: str) -> str | None:
 def resolver_movie_id(raw_input: str, media_type: str) -> tuple[str, str]:
     """
     Acepta:
-      1. ID numérico puro              → "660120"
-      2. Enlace de TMDB               → "https://www.themoviedb.org/movie/660120-..."
-      3. Nombre / título de búsqueda  → "Verdens verste menneske"
-
+      1. ID numérico puro   → "660120"
+      2. Enlace de TMDB     → "https://www.themoviedb.org/movie/660120-..."
+      3. Nombre de búsqueda → "Verdens verste menneske"
     Devuelve (movie_id, media_type_resuelto)
     """
     raw = raw_input.strip()
 
-    # ── Caso 1: ID numérico puro ──────────────────────────────────
+    # Caso 1: ID numérico puro
     if raw.isdigit():
         print(f"Input reconocido como ID numérico: {raw}")
         return raw, media_type
 
-    # ── Caso 2: URL de TMDB ───────────────────────────────────────
+    # Caso 2: URL de TMDB
     if "themoviedb.org" in raw:
         movie_id, tipo = extraer_id_de_url(raw)
         if movie_id:
@@ -85,13 +83,47 @@ def resolver_movie_id(raw_input: str, media_type: str) -> tuple[str, str]:
             return movie_id, tipo or media_type
         print("URL detectada pero no se pudo extraer el ID, intentando como nombre...")
 
-    # ── Caso 3: Nombre / búsqueda ─────────────────────────────────
+    # Caso 3: Nombre / búsqueda libre
     print(f"Input reconocido como nombre de búsqueda: '{raw}'")
     movie_id = buscar_por_nombre(raw, media_type)
     if movie_id:
         return movie_id, media_type
 
     raise ValueError(f"No se pudo resolver el input '{raw_input}' a un ID de TMDB.")
+
+
+# ════════════════════════════════════════════════════════════════
+#  MEJOR OVERVIEW: recorre TODAS las traducciones disponibles
+# ════════════════════════════════════════════════════════════════
+
+def obtener_mejor_overview(data: dict) -> str:
+    """
+    Prioridad:
+      1. Overview en inglés (en-US)
+      2. Overview más largo entre TODAS las traducciones de TMDB
+    Así funciona sin importar el idioma original de la película.
+    """
+    overview_en = data.get("overview", "").strip()
+    if overview_en:
+        return overview_en
+
+    print("Overview en inglés vacío, buscando en todas las traducciones disponibles...")
+    traducciones = data.get("translations", {}).get("translations", [])
+
+    mejor_texto = ""
+    mejor_lang  = ""
+    for t in traducciones:
+        ov = t.get("data", {}).get("overview", "").strip()
+        if len(ov) > len(mejor_texto):
+            mejor_texto = ov
+            mejor_lang  = t.get("iso_639_1", "?")
+
+    if mejor_texto:
+        print(f"   Mejor overview encontrado en idioma: '{mejor_lang}' ({len(mejor_texto)} chars)")
+    else:
+        print("   No se encontró overview en ningún idioma.")
+
+    return mejor_texto
 
 
 # ════════════════════════════════════════════════════════════════
@@ -133,18 +165,8 @@ def obtener_datos_pelicula(movie_id: str, media_type: str) -> dict:
     print(f"Status TMDB: {r.status_code}")
     data = r.json()
 
-    # ── Fallback de sinopsis si el inglés viene vacío ─────────────
-    if not data.get("overview", "").strip():
-        print("Overview en inglés vacío, buscando en traducciones...")
-        traducciones = data.get("translations", {}).get("translations", [])
-        for lang in ["es", "nb", "no", "fr", "de", "pt"]:
-            for t in traducciones:
-                if t.get("iso_639_1") == lang and t.get("data", {}).get("overview"):
-                    data["overview"] = t["data"]["overview"]
-                    print(f"   Overview encontrado en idioma: {lang}")
-                    break
-            if data.get("overview", "").strip():
-                break
+    # Reemplazar overview por el mejor disponible en cualquier idioma
+    data["overview"] = obtener_mejor_overview(data)
 
     return data
 
@@ -166,23 +188,23 @@ def main():
     # 1. Resolver el input a un ID numérico
     movie_id, media_type = resolver_movie_id(MOVIE_INPUT, MEDIA_TYPE)
 
-    # 2. Obtener datos de TMDB
+    # 2. Obtener datos de TMDB (con fallback de overview universal)
     data = obtener_datos_pelicula(movie_id, media_type)
 
     # 3. Construir resultado
     titulo      = data.get("title") or data.get("name", "Sin título")
-    sinopsis_en = data.get("overview", "")
-    sinopsis_es = traducir(sinopsis_en) if sinopsis_en else "Sin sinopsis disponible"
-    año         = (data.get("release_date") or data.get("first_air_date", ""))[:4]
-    generos     = [g["name"] for g in data.get("genres", [])]
-    paises      = data.get("production_countries") or data.get("origin_country", [])
-    pais_origen = ""
+    sinopsis_raw = data.get("overview", "")
+    sinopsis_es  = traducir(sinopsis_raw) if sinopsis_raw else "Sin sinopsis disponible"
+    año          = (data.get("release_date") or data.get("first_air_date", ""))[:4]
+    generos      = [g["name"] for g in data.get("genres", [])]
+    paises       = data.get("production_countries") or data.get("origin_country", [])
+    pais_origen  = ""
     if paises:
         pais_origen = paises[0] if isinstance(paises[0], str) else paises[0].get("name", "")
-    tipo        = "Película" if media_type == "movie" else "Serie"
-    poster      = data.get("poster_path", "")
-    poster_url  = f"https://image.tmdb.org/t/p/w500{poster}" if poster else ""
-    plataformas = obtener_plataformas(data)
+    tipo         = "Película" if media_type == "movie" else "Serie"
+    poster       = data.get("poster_path", "")
+    poster_url   = f"https://image.tmdb.org/t/p/w500{poster}" if poster else ""
+    plataformas  = obtener_plataformas(data)
 
     resultado = {
         "movie_id"   : movie_id,
@@ -202,7 +224,7 @@ def main():
         json.dump(resultado, f, ensure_ascii=False, indent=2)
 
     print(f"\n✅ Datos guardados: {titulo} ({año})")
-    print(f"   Géneros        : {', '.join(generos)}")
+    print(f"   Géneros           : {', '.join(generos) or 'ninguno'}")
     print(f"   Plataformas pago  : {', '.join(plataformas['pago']) or 'ninguna'}")
     print(f"   Plataformas gratis: {', '.join(plataformas['gratis']) or 'ninguna'}")
 
