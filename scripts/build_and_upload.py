@@ -341,7 +341,7 @@ def generar_metadata(data: dict) -> dict:
     plataformas_pago   = ", ".join(data["plataformas"]["pago"][:3])
     plataformas_gratis = ", ".join(data["plataformas"]["gratis"][:3])
     msg = claude.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=500,
         messages=[{
             "role": "user",
@@ -389,7 +389,7 @@ def generar_metadata_tiktok(data: dict) -> dict:
     hashtags_extra = " ".join(hashtags_plataforma)
 
     msg = claude.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=300,
         messages=[{
             "role": "user",
